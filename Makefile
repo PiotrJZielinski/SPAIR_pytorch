@@ -13,7 +13,7 @@ sync:
 	rsync -arvu --exclude=logs_v2/ --exclude=logs/ --exclude=spair/data/* --exclude=data/* -e ssh . naturalreaders:spair_pytorch
 
 tb:
-	tensorboard --logdir logs/ --host 0.0.0.0 --port 8081
+	tensorboard --logdir logs/
 
 
 overnight:
@@ -24,6 +24,9 @@ overnight:
 	python3 train.py --gpu --original_spair  || true
 	python3 train.py --gpu --original_spair  --z_pres no_prior || true
 	python3 train.py --gpu --original_spair  --z_pres uniform_prior || true
+
+cityscapes:
+	python3 train.py --gpu
 
 test_new_features:
 	python3 train.py --gpu --backbone_self_attention || true
