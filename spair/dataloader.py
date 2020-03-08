@@ -1,10 +1,7 @@
-
 import h5py
 import numpy as np
-from spair import config as cfg
 import torch
 from torch.utils import data
-import cv2
 
 
 class SimpleScatteredMNISTDataset(torch.utils.data.Dataset):
@@ -34,4 +31,3 @@ class SimpleScatteredMNISTDataset(torch.utils.data.Dataset):
 
     def __len__(self):
         return self.dataset['image'].shape[0]
-

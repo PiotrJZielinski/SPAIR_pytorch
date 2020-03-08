@@ -1,12 +1,12 @@
 import itertools
 
-from torch import nn
 from torch.distributions import Normal, Uniform
 from torch.distributions.kl import kl_divergence
-from spair.modules import *
-from spair.manager import RunManager
-from spair.modules import Backbone, build_MLP
+
 from spair import flow_model as fnn
+from spair.manager import RunManager
+from spair.modules import *
+from spair.modules import Backbone, build_MLP
 
 
 class SpairBase(nn.Module):
@@ -19,13 +19,15 @@ class SpairBase(nn.Module):
 
         # context box dimension based on N_lookbacks
         # totalsize is n_lookback_cells * [localization, attribute, depth, presence] ~= 224
-        self.context_dim = (cfg.N_LOOKBACK * 2 + 1 ) ** 2 // 2 * (4 + cfg.N_ATTRIBUTES + 1 + 1)
+        self.context_dim = (cfg.N_LOOKBACK * 2 + 1) ** 2 // 2 * (
+                    4 + cfg.N_ATTRIBUTES + 1 + 1)
 
         self._build_networks()
         self._build_edge_element()
         self._build_indep_prior()
 
-        self.pixels_per_cell = tuple(int(i) for i in self.backbone.grid_cell_size) #[pixel_x, pixel_y]
+        self.pixels_per_cell = tuple(
+            int(i) for i in self.backbone.grid_cell_size)  # [pixel_x, pixel_y]
 
         self.run_args = RunManager.run_args
 
@@ -48,16 +50,13 @@ class SpairBase(nn.Module):
         self.obj_pres_prob = {}
         self.obj_pres = {}
 
-
         self._compute_latent_vars(x, backbone_feat)
 
         # self.attn(test_context)
 
-
         recon_x = self._render(self.z_attr, self.z_where, self.z_depth, self.z_pres, x)
         kl_loss = self._compute_KL(self.z_pres, self.z_pres_prob)
         loss = self._build_loss(x, recon_x, kl_loss)
-
 
         return loss, recon_x, self.z_where, self.z_pres
 
@@ -70,8 +69,8 @@ class SpairBase(nn.Module):
             kl_div = kl_divergence(dist, prior)
             if RunManager.run_args.z_pres == 'self_attention':
                 b, c, h, w = kl_div.shape
-                reshaped_kl = kl_div.view(b, c, h*w )
-                masked = torch.bmm(reshaped_kl, z_pres).view(b,c,h,w)
+                reshaped_kl = kl_div.view(b, c, h * w)
+                masked = torch.bmm(reshaped_kl, z_pres).view(b, c, h, w)
 
             else:
                 masked = z_pres * kl_div
@@ -87,20 +86,22 @@ class SpairBase(nn.Module):
         _, H, W = self.feature_space_dim
         HW = H * W
         batch_size = self.batch_size
-        count_support = torch.arange(HW + 1, dtype=torch.float32).to(self.device)# [50] ~ [0, 1, ... 50]
+        count_support = torch.arange(HW + 1, dtype=torch.float32).to(
+            self.device)  # [50] ~ [0, 1, ... 50]
         # FIXME starts at 1 output and gets small gradually
         count_prior_log_odds = exponential_decay(**cfg.OBJ_PRES_COUNT_LOG_PRIOR)
         # count_prior_prob = torch.sigmoid(count_prior_log_odds)
         count_prior_prob = 1 / ((-count_prior_log_odds).exp() + 1)
         # p(z_pres|C=nz(z_pres)) geometric dist, see appendix A
-        count_distribution = (1 - count_prior_prob) * (count_prior_prob ** count_support)
+        count_distribution = (1 - count_prior_prob) * (
+                    count_prior_prob ** count_support)
 
         normalizer = count_distribution.sum()
         count_distribution = count_distribution / normalizer
         count_distribution = count_distribution.repeat(batch_size, 1)  # (Batch, 50)
 
         # number of symbols discovered so far
-        count_so_far = torch.zeros(batch_size, 1).to(self.device) # (Batch, 1)
+        count_so_far = torch.zeros(batch_size, 1).to(self.device)  # (Batch, 1)
 
         i = 0
 
@@ -109,13 +110,13 @@ class SpairBase(nn.Module):
         # print('\n\np_z_given_Cz%d'%i, p_z_given_Cz, torch.isnan(p_z_given_Cz).sum())
         for h, w in itertools.product(range(H), range(W)):
 
-            p_z_given_Cz = torch.clamp(count_support - count_so_far, min=0., max=(HW - i)) / (HW - i)
+            p_z_given_Cz = torch.clamp(count_support - count_so_far, min=0.,
+                                       max=(HW - i)) / (HW - i)
 
             # Reshape for batch matmul
             # Adds a new dim to to each vector for dot product [Batch, 50, ?]
-            _count_distribution = count_distribution[:,None,:]
-            _p_z_given_Cz = p_z_given_Cz[:,:,None]
-
+            _count_distribution = count_distribution[:, None, :]
+            _p_z_given_Cz = p_z_given_Cz[:, :, None]
 
             prob = z_pres_prob[:, :, h, w]
 
@@ -127,12 +128,11 @@ class SpairBase(nn.Module):
                 # equivalent of doing batch dot product on two vectors
                 p_z = torch.bmm(_count_distribution, _p_z_given_Cz).squeeze(-1)
 
-
             # Bernoulli KL
             # note to self: May need to use safe log to prevent NaN
             _obj_kl = (
-                prob * (safe_log(prob) - safe_log(p_z))
-                + (1-prob) * (safe_log(1-prob) - safe_log(1-p_z))
+                    prob * (safe_log(prob) - safe_log(p_z))
+                    + (1 - prob) * (safe_log(1 - prob) - safe_log(1 - p_z))
             )
 
             obj_kl[:, :, h, w] = _obj_kl
@@ -141,7 +141,7 @@ class SpairBase(nn.Module):
             # original: tf.to_float(tensors["obj"][:, h, w, b, :] > 0.5), but obj should already be rounded
             sample = torch.round(z_pres[:, :, h, w])
             # Bernoulli prob
-            mult = sample * p_z_given_Cz + (1-sample) * (1-p_z_given_Cz)
+            mult = sample * p_z_given_Cz + (1 - sample) * (1 - p_z_given_Cz)
 
             # update count distribution
             count_distribution1 = mult * count_distribution
@@ -153,18 +153,17 @@ class SpairBase(nn.Module):
             # Test underflow issues
 
             debug_tools.nan_hunter('KL Divergence',
-                                   grid_location = (h,w),
-                                   _obj_kl = _obj_kl,
-                                   p_z = p_z,
-                                   prob = prob,
-                                   count_distribution = count_distribution,
-                                   p_z_given_cz = p_z_given_Cz,
+                                   grid_location=(h, w),
+                                   _obj_kl=_obj_kl,
+                                   p_z=p_z,
+                                   prob=prob,
+                                   count_distribution=count_distribution,
+                                   p_z_given_cz=p_z_given_Cz,
                                    )
 
             count_so_far += sample
 
             i += 1
-
 
         KL['pres_dist'] = obj_kl
 
@@ -196,7 +195,6 @@ class SpairBase(nn.Module):
          context requires 4 surrounding cells, if they fall outside grid, then this cell is used
          '''
 
-
         # sizes for localization [x, y, h, w], obj attributes, obj depth, obj presence
         sizes = [4, cfg.N_ATTRIBUTES, 1, 1]
         t = torch.randn(sum(sizes), requires_grad=True).to(self.device)
@@ -209,19 +207,19 @@ class SpairBase(nn.Module):
         elem = torch.cat((loc, attr, depth, pres))
         self.register_parameter('virtual_edge_element', nn.Parameter(elem))
 
-    def _get_sequential_context(self, context_mat:dict, h, w, edge_element):
+    def _get_sequential_context(self, context_mat: dict, h, w, edge_element):
 
         range = cfg.N_LOOKBACK
 
         # build a range of nearby visited rows and cols. Rows include current row
-        cols = np.arange(-range, range+1)
+        cols = np.arange(-range, range + 1)
         rows = np.arange(-range, 1)
         # generate all neighbouring cells above current cell
         mesh = np.array(np.meshgrid(rows, cols)).T
         # flatten the coordinates to N x 2
         flattened = np.reshape(mesh, (-1, 2))
         # remove the last few elements that were inlucded accidentally
-        coords = flattened[:-(range+1), :]
+        coords = flattened[:-(range + 1), :]
 
         # relative coords to absolute coords
         neighbours = coords + np.array([h, w], dtype=np.float32)
@@ -245,7 +243,7 @@ class SpairBase(nn.Module):
 
         input_glimpses = stn(x, normalized_box, cfg.OBJECT_SHAPE)
         if not RunManager.run_args.use_conv_z_attr:
-            input_glimpses = input_glimpses.flatten(start_dim=1) # flatten
+            input_glimpses = input_glimpses.flatten(start_dim=1)  # flatten
         attr = self.object_encoder(input_glimpses)
         # attr = attr.view(-1, 2 * cfg.N_ATTRIBUTES)
         return input_glimpses, attr
@@ -266,7 +264,7 @@ class SpairBase(nn.Module):
 
         obj_prob = torch.sigmoid(obj_pre_sigmoid)  # Object Classification
         # TODO If training then pass through, else round it up
-        obj = obj_prob # torch.round(obj)
+        obj = obj_prob  # torch.round(obj)
 
         return obj, obj_prob
 
@@ -285,7 +283,7 @@ class SpairBase(nn.Module):
             arg = freeze_factor * arg.detach() + (1 - freeze_factor) * arg
             ret.append(arg)
 
-        if len(ret) == 1: return ret[0] # single element doesn't need unfolding
+        if len(ret) == 1: return ret[0]  # single element doesn't need unfolding
         return ret
 
     def _render(self, z_attr, z_where, z_depth_in, z_pres_in, x):
@@ -313,11 +311,12 @@ class SpairBase(nn.Module):
         # MLP to generate image
         obj_decoder_out = self.object_decoder(object_decoder_in)
         input_chan = cfg.INPUT_IMAGE_SHAPE[0]
-        obj_decoder_out = obj_decoder_out.view(-1, px, px, input_chan + 1) # [Batch * n_cells, pixels_w, pixels_h, channels + alpha]
+        obj_decoder_out = obj_decoder_out.view(-1, px, px,
+                                               input_chan + 1)  # [Batch * n_cells, pixels_w, pixels_h, channels + alpha]
         object_logits, alpha_logits = torch.split(obj_decoder_out, input_chan, dim=-1)
 
         # object_logits scale + bias mask
-        object_logits *= cfg.OBJ_LOGIT_SCALE  #[B, 14, 14, 4] * [4]
+        object_logits *= cfg.OBJ_LOGIT_SCALE  # [B, 14, 14, 4] * [4]
         alpha_logits *= cfg.ALPHA_LOGIT_SCALE
         alpha_logits += cfg.ALPHA_LOGIT_BIAS
         # TODO DELETE ME
@@ -332,11 +331,16 @@ class SpairBase(nn.Module):
         # TODO END DELETE ME
 
         # incorporate presence in alpha channel
-        if RunManager.run_args.z_pres =='self_attention':
+        if RunManager.run_args.z_pres == 'self_attention':
             # QK dot V in softmax
-            alpha_reshaped = alpha.view(-1, H*W, px*px).permute(0,2,1) # Expand and move H*W to trailing dim
+            alpha_reshaped = alpha.view(-1, H * W, px * px).permute(0, 2,
+                                                                    1)  # Expand and move H*W to trailing dim
             attended_alpha = torch.bmm(alpha_reshaped, z_pres_in)
-            reshaped_attended_alpha = attended_alpha.permute(0,2,1,).contiguous().view(-1, px, px, 1) # restore original shape
+            reshaped_attended_alpha = attended_alpha.permute(0, 2,
+                                                             1, ).contiguous().view(-1,
+                                                                                    px,
+                                                                                    px,
+                                                                                    1)  # restore original shape
 
             alpha = reshaped_attended_alpha
         else:
@@ -347,19 +351,22 @@ class SpairBase(nn.Module):
         importance = torch.clamp(importance, min=0.01)
 
         # Merge importance to objects:
-        objects = torch.cat([objects, alpha, importance], dim=-1 ) # attach importance to RGBA, 5 channels to total
+        objects = torch.cat([objects, alpha, importance],
+                            dim=-1)  # attach importance to RGBA, 5 channels to total
 
         # TODO debug output image, remove me later
-        debug_tools.plot_prerender_components(objects, z_pres_flat, z_depth_flat, z_where, x)
+        debug_tools.plot_prerender_components(objects, z_pres_flat, z_depth_flat,
+                                              z_where, x)
 
         # ---- exiting B x H x W x C realm .... ----
 
         objects_ = to_C_H_W(objects)
 
         img_c, img_h, img_w, = (self.image_shape)
-        n_obj = H*W # max number of objects in a grid
+        n_obj = H * W  # max number of objects in a grid
         transformed_imgs = stn(objects_, z_where, [img_h, img_w], inverse=True)
-        transformed_objects = transformed_imgs.contiguous().view(-1, n_obj, img_c + 2 , img_h, img_w)
+        transformed_objects = transformed_imgs.contiguous().view(-1, n_obj, img_c + 2,
+                                                                 img_h, img_w)
         # incorporate alpha
         # FIXME The original implement doesn't seem to be calculating alpha correctly.
         #  If multiple objects overlap one pixel, alpha is only computed against background
@@ -368,9 +375,11 @@ class SpairBase(nn.Module):
         # TODO we can potentially compute alpha and importance prior to stn, it will be much faster
 
         input_chan = cfg.INPUT_IMAGE_SHAPE[0]
-        color_channels  = transformed_objects[:, :, :input_chan, :, :]
-        alpha = transformed_objects[:, :, input_chan:input_chan+1, :, :] # keep the empty dim
-        importance = transformed_objects[:,:, input_chan+1:input_chan+2, :, :] + 1e-9
+        color_channels = transformed_objects[:, :, :input_chan, :, :]
+        alpha = transformed_objects[:, :, input_chan:input_chan + 1, :,
+                :]  # keep the empty dim
+        importance = transformed_objects[:, :, input_chan + 1:input_chan + 2, :,
+                     :] + 1e-9
 
         img = alpha.expand_as(color_channels) * color_channels
 
@@ -382,11 +391,11 @@ class SpairBase(nn.Module):
         importance = importance / importance.sum(dim=1, keepdim=True)
         importance = importance.expand_as(img)
         # scale gradient
-        weighted_grads_image = img * importance # # + (1 - importance) * img.detach() # TODO Reinstate me!!!!!!!!
+        weighted_grads_image = img * importance  # # + (1 - importance) * img.detach() # TODO Reinstate me!!!!!!!!
         # TODO DELETE ME
         # weighted_grads_image.register_hook(lambda grad: debug_tools.grad_nan_hook('weighted image', grad))
         # TODO END DELETE ME
-        output_image = weighted_grads_image.sum(dim=1) # sum up along n_obj per image
+        output_image = weighted_grads_image.sum(dim=1)  # sum up along n_obj per image
 
         # Fix numerical issue
         output_image = torch.clamp(output_image, min=0, max=1)
@@ -402,23 +411,22 @@ class SpairBase(nn.Module):
         # KL loss with Beta factor
         kl_loss = 0
         for name, z_kl in kl.items():
-            kl_mean = torch.mean(torch.sum(z_kl, dim=[1,2,3])) # batch mean
+            kl_mean = torch.mean(torch.sum(z_kl, dim=[1, 2, 3]))  # batch mean
             kl_loss += kl_mean
             # print('KL_%s_loss:' % name, '{:.4f}'.format(kl_mean.item()))
-            self.writer.add_scalar('losses/KL{}'.format(name), kl_mean.detach(), self.global_step )
-
+            self.writer.add_scalar('losses/KL{}'.format(name), kl_mean.detach(),
+                                   self.global_step)
 
         loss = recon_loss + cfg.VAE_BETA * kl_loss + self.normalizing_flow_loss
         # print('\n ===> total loss:', '{:.4f}'.format(loss.item()))
         # self.writer.add_scalar('losses/normalizing_flow', self.normalizing_flow_loss.detach(), self.global_step)
         self.writer.add_scalar('losses/total', loss.detach(), self.global_step)
 
-
         return loss
 
-    def _debug_logging(self, z_where, z_attr, z_pres, z_depth ):
+    def _debug_logging(self, z_where, z_attr, z_pres, z_depth):
 
-        if self.training_wheel == 1.0: # only start training when training wheel enables
+        if self.training_wheel == 1.0:  # only start training when training wheel enables
             return
         z_where = z_where.cpu().detach()
         z_pres = z_pres.cpu().detach()
@@ -429,7 +437,7 @@ class SpairBase(nn.Module):
         np.set_printoptions(threshold=np.inf, precision=6)
 
         print('=========== debugging information begin ===============')
-        box = z_where[0, :, h , w].numpy()
+        box = z_where[0, :, h, w].numpy()
         box_x, box_y, box_w, box_h = box
         print('box:')
         print(' x:\t{:.6f}'.format(box_x))
@@ -457,6 +465,7 @@ class SpairBase(nn.Module):
         self.writer.add_scalar('z_depth/min', z_depth_np.min(), self.global_step)
         print('========= end of debugging info  ======================')
 
+
 class Spair(SpairBase):
 
     def _compute_latent_vars(self, x, backbone_features):
@@ -465,10 +474,13 @@ class Spair(SpairBase):
         context_mat = {}
         edge_element = self.virtual_edge_element[None, :].repeat(self.batch_size, 1)
         self.training_wheel = exponential_decay(**cfg.LATENT_VAR_TRAINING_WHEEL_PARAM)
-        self.writer.add_scalar('training_wheel', self.training_wheel.detach(), self.global_step)
+        self.writer.add_scalar('training_wheel', self.training_wheel.detach(),
+                               self.global_step)
 
-        self.z_where = torch.empty(self.batch_size, 4, H, W).to(self.device) # 4 = xt, yt, xs, ys
-        self.z_attr = torch.empty(self.batch_size, cfg.N_ATTRIBUTES, H, W,).to(self.device)
+        self.z_where = torch.empty(self.batch_size, 4, H, W).to(
+            self.device)  # 4 = xt, yt, xs, ys
+        self.z_attr = torch.empty(self.batch_size, cfg.N_ATTRIBUTES, H, W, ).to(
+            self.device)
         self.z_depth = torch.empty(self.batch_size, 1, H, W).to(self.device)
         self.z_pres = torch.empty(self.batch_size, 1, H, W).to(self.device)
         self.z_pres_prob = torch.empty(self.batch_size, 1, H, W).to(self.device)
@@ -476,7 +488,9 @@ class Spair(SpairBase):
         # s = torch.cuda.Stream()
         # # # Iterate through each grid cell and bounding boxes for that cell
         # with torch.cuda.stream(s):
-        debug_tools.nan_hunter('Before Main Loop', input_data = x, edge_element=edge_element, backbone_feature=backbone_features)
+        debug_tools.nan_hunter('Before Main Loop', input_data=x,
+                               edge_element=edge_element,
+                               backbone_feature=backbone_features)
         # test_context = torch.empty(self.batch_size, 55, H, W).to(self.device)
 
         for h, w in itertools.product(range(H), range(W)):
@@ -498,7 +512,8 @@ class Spair(SpairBase):
             self.z_attr[:, :, h, w, ] = attr
 
             # --- z_depth ---
-            layer_inp = torch.cat([cell_feat, context, passthru_features, box, attr], dim=1)
+            layer_inp = torch.cat([cell_feat, context, passthru_features, box, attr],
+                                  dim=1)
 
             depth_latent, passthru_features = self.z_network(layer_inp)
 
@@ -510,7 +525,8 @@ class Spair(SpairBase):
             self.z_depth[:, :, h, w] = depth
 
             # --- z_presence ---
-            layer_inp = torch.cat([cell_feat, context, passthru_features, box, attr, depth], dim=1)
+            layer_inp = torch.cat(
+                [cell_feat, context, passthru_features, box, attr, depth], dim=1)
             pres_logit = self.obj_network(layer_inp)
             obj_pres, obj_pres_prob = self._build_obj_pres(pres_logit)
 
@@ -546,27 +562,32 @@ class Spair(SpairBase):
 
         # bounding box
         inputsize = n_backbone_features + self.context_dim
-        self.box_network = build_MLP(inputsize, multiple_output=(n_localization_latent, n_passthrough_features))
+        self.box_network = build_MLP(inputsize, multiple_output=(
+        n_localization_latent, n_passthrough_features))
 
         # object attribute
         n_attr_out = 2 * cfg.N_ATTRIBUTES
         obj_dim = cfg.OBJECT_SHAPE[0]
         input_chan = cfg.INPUT_IMAGE_SHAPE[0]
-        n_inp_shape = obj_dim * obj_dim * input_chan # flattening the 14 x 14 x 3 image
-        self.object_encoder = build_MLP(n_inp_shape, n_attr_out, hidden_layers=[256, 128])
+        n_inp_shape = obj_dim * obj_dim * input_chan  # flattening the 14 x 14 x 3 image
+        self.object_encoder = build_MLP(n_inp_shape, n_attr_out,
+                                        hidden_layers=[256, 128])
 
         # object depth
         z_inp_shape = 4 + cfg.N_ATTRIBUTES + n_passthrough_features + self.context_dim + cfg.N_BACKBONE_FEATURES
-        self.z_network = build_MLP(z_inp_shape, multiple_output=(2, n_passthrough_features)) # For training pass through features
+        self.z_network = build_MLP(z_inp_shape, multiple_output=(
+        2, n_passthrough_features))  # For training pass through features
 
         # object presence
-        obj_inp_shape = z_inp_shape + 1 # incorporated z_network out dim (1 dim)
+        obj_inp_shape = z_inp_shape + 1  # incorporated z_network out dim (1 dim)
         self.obj_network = build_MLP(obj_inp_shape, 1)
 
         # object decoder
         input_chan = cfg.INPUT_IMAGE_SHAPE[0]
-        decoded_dim = obj_dim * obj_dim * (input_chan+1) # [GrayScale + Alpha] or [RGB+A]
-        self.object_decoder = build_MLP(cfg.N_ATTRIBUTES, decoded_dim, hidden_layers=[128, 256])
+        decoded_dim = obj_dim * obj_dim * (
+                    input_chan + 1)  # [GrayScale + Alpha] or [RGB+A]
+        self.object_decoder = build_MLP(cfg.N_ATTRIBUTES, decoded_dim,
+                                        hidden_layers=[128, 256])
 
         self.attn = Self_Attn(55)
 
@@ -580,13 +601,13 @@ class Spair(SpairBase):
         cy_mean, cx_mean, height_mean, width_mean = torch.chunk(mean, 4, dim=-1)
         cy_std, cx_std, height_std, width_std = torch.chunk(std, 4, dim=-1)
 
-        cy_logits = self._sample_z(cy_mean, cy_std, 'cy_logit', (h,w))
-        cx_logits = self._sample_z(cx_mean, cx_std, 'cx_logit', (h,w))
-        height_logits = self._sample_z(height_mean, height_std, 'height_logit', (h,w))
+        cy_logits = self._sample_z(cy_mean, cy_std, 'cy_logit', (h, w))
+        cx_logits = self._sample_z(cx_mean, cx_std, 'cx_logit', (h, w))
+        height_logits = self._sample_z(height_mean, height_std, 'height_logit', (h, w))
         width_logits = self._sample_z(width_mean, width_std, 'width_logit', (h, w))
 
         # --- cell y/x transform ---
-        cell_y = clamped_sigmoid(cy_logits) # single digit
+        cell_y = clamped_sigmoid(cy_logits)  # single digit
         cell_x = clamped_sigmoid(cx_logits)
 
         # yx ~ [-0.5 , 1.5]
@@ -643,13 +664,17 @@ class Spair(SpairBase):
         if name not in self.dist_param.keys():
             _, H, W = self.feature_space_dim
             self.dist_param[name] = {}
-            self.dist_param[name]['mean'] = torch.empty(self.batch_size, mean.shape[-1], H, W, ).to(self.device)
-            self.dist_param[name]['sigma'] = torch.empty(self.batch_size, mean.shape[-1], H, W, ).to(self.device)
+            self.dist_param[name]['mean'] = torch.empty(self.batch_size, mean.shape[-1],
+                                                        H, W, ).to(self.device)
+            self.dist_param[name]['sigma'] = torch.empty(self.batch_size,
+                                                         mean.shape[-1], H, W, ).to(
+                self.device)
         x, y = cell_coord
         self.dist_param[name]['mean'][:, :, x, y] = mean
         self.dist_param[name]['sigma'][:, :, x, y] = var
 
         return dist.rsample()
+
 
 class ConvSpair(SpairBase):
 
@@ -664,54 +689,67 @@ class ConvSpair(SpairBase):
         n_backbone_features = self.feature_space_dim[0]
 
         # bounding box
-        self.z_where_net = LatentConv(n_backbone_features, n_localization_latent * 2, additional_out_channels = n_passthrough_features)
+        self.z_where_net = LatentConv(n_backbone_features, n_localization_latent * 2,
+                                      additional_out_channels=n_passthrough_features)
         if RunManager.run_args.use_z_where_decoder:
-            self.NF_planar_x = fnn.SingleZPlanarNF2d(num_flows=10, q_z_nn_dim=n_backbone_features)
-            self.NF_planar_y = fnn.SingleZPlanarNF2d(num_flows=10, q_z_nn_dim=n_backbone_features)
-            self.NF_planar_h = fnn.SingleZPlanarNF2d(num_flows=10, q_z_nn_dim=n_backbone_features)
-            self.NF_planar_w = fnn.SingleZPlanarNF2d(num_flows=10, q_z_nn_dim=n_backbone_features)
+            self.NF_planar_x = fnn.SingleZPlanarNF2d(num_flows=10,
+                                                     q_z_nn_dim=n_backbone_features)
+            self.NF_planar_y = fnn.SingleZPlanarNF2d(num_flows=10,
+                                                     q_z_nn_dim=n_backbone_features)
+            self.NF_planar_h = fnn.SingleZPlanarNF2d(num_flows=10,
+                                                     q_z_nn_dim=n_backbone_features)
+            self.NF_planar_w = fnn.SingleZPlanarNF2d(num_flows=10,
+                                                     q_z_nn_dim=n_backbone_features)
 
         z_depth_in = 4 + cfg.N_ATTRIBUTES + n_passthrough_features + cfg.N_BACKBONE_FEATURES
-        self.z_depth_net = LatentConv(z_depth_in, 2, additional_out_channels = n_passthrough_features)
+        self.z_depth_net = LatentConv(z_depth_in, 2,
+                                      additional_out_channels=n_passthrough_features)
 
         # object presence
-        z_pres_in = z_depth_in + 1 # incorporated z_network out dim (1 dim)
+        z_pres_in = z_depth_in + 1  # incorporated z_network out dim (1 dim)
         if RunManager.run_args.z_pres == 'self_attention':
             self.z_pres_self_attn = Self_Attn(z_pres_in)
         else:
             self.z_pres_net = LatentConv(z_pres_in, 1)
 
-
         # object encoder
         n_attr_out = 2 * cfg.N_ATTRIBUTES
         obj_dim = cfg.OBJECT_SHAPE[0]
         input_chan = cfg.INPUT_IMAGE_SHAPE[0]
-        n_inp_shape = obj_dim * obj_dim * input_chan # flattening the 14 x 14 x 3 image
-        self.object_encoder = build_MLP(n_inp_shape, n_attr_out, hidden_layers = [256, 128])
+        n_inp_shape = obj_dim * obj_dim * input_chan  # flattening the 14 x 14 x 3 image
+        self.object_encoder = build_MLP(n_inp_shape, n_attr_out,
+                                        hidden_layers=[256, 128])
 
         # object decoder
         input_chan = cfg.INPUT_IMAGE_SHAPE[0]
-        decoded_dim = obj_dim * obj_dim * (input_chan+1) # [GrayScale + Alpha] or [RGB+A]
-        self.object_decoder = build_MLP(cfg.N_ATTRIBUTES, decoded_dim, hidden_layers=[128, 256])
+        decoded_dim = obj_dim * obj_dim * (
+                    input_chan + 1)  # [GrayScale + Alpha] or [RGB+A]
+        self.object_decoder = build_MLP(cfg.N_ATTRIBUTES, decoded_dim,
+                                        hidden_layers=[128, 256])
 
         if RunManager.run_args.use_conv_z_attr:
-            n_inp_shape = [input_chan, obj_dim , obj_dim ]  # flattening the 14 x 14 x 3 image
+            n_inp_shape = [input_chan, obj_dim,
+                           obj_dim]  # flattening the 14 x 14 x 3 image
             self.object_encoder = ObjectConvEncoder(n_inp_shape, n_attr_out)
-            self.object_decoder = ObjectConvDecoder(cfg.N_ATTRIBUTES, input_chan + 1) # alpha channel
+            self.object_decoder = ObjectConvDecoder(cfg.N_ATTRIBUTES,
+                                                    input_chan + 1)  # alpha channel
 
-    def _compute_latent_vars(self, x:torch.Tensor, backbone_features):
+    def _compute_latent_vars(self, x: torch.Tensor, backbone_features):
         _, H, W = self.feature_space_dim
 
         self.training_wheel = exponential_decay(**cfg.LATENT_VAR_TRAINING_WHEEL_PARAM)
-        self.writer.add_scalar('training_wheel', self.training_wheel.detach(), self.global_step)
+        self.writer.add_scalar('training_wheel', self.training_wheel.detach(),
+                               self.global_step)
         # s = torch.cuda.Stream()
         # # # Iterate through each grid cell and bounding boxes for that cell
         # with torch.cuda.stream(s):
-        debug_tools.nan_hunter('Before Main Loop', input_data=x, backbone_feature=backbone_features)
+        debug_tools.nan_hunter('Before Main Loop', input_data=x,
+                               backbone_feature=backbone_features)
         # test_context = torch.empty(self.batch_size, 55, H, W).to(self.device)
 
         # --- z_where ---
-        z_where, passthru_features, z_where_h  = self.z_where_net(backbone_features, return_h = True)
+        z_where, passthru_features, z_where_h = self.z_where_net(backbone_features,
+                                                                 return_h=True)
         local_bbox, bbox = self._build_box(z_where, z_where_h)
         self.z_where = bbox
 
@@ -722,8 +760,10 @@ class ConvSpair(SpairBase):
         x_expanded = x.unsqueeze(1).expand(-1, h * w, -1, -1, -1, )
 
         # [ Batch, H*W, ... ] -> [ Batch*H*W, ... ]
-        bbox_bundle = bbox_hwc.contiguous().view(batch_size * h * w, -1 )
-        x_bundle = x_expanded.contiguous().view(batch_size * h * w, self.image_shape[0], self.image_shape[1], self.image_shape[2])
+        bbox_bundle = bbox_hwc.contiguous().view(batch_size * h * w, -1)
+        x_bundle = x_expanded.contiguous().view(batch_size * h * w, self.image_shape[0],
+                                                self.image_shape[1],
+                                                self.image_shape[2])
 
         input_glimpses, z_what_bundle = self._encode_attr(x_bundle, bbox_bundle)
 
@@ -735,7 +775,8 @@ class ConvSpair(SpairBase):
         self.z_attr = attr
 
         # --- z_depth ---
-        layer_inp = torch.cat([backbone_features, passthru_features, local_bbox, attr], dim=1)
+        layer_inp = torch.cat([backbone_features, passthru_features, local_bbox, attr],
+                              dim=1)
 
         depth_latent, passthru_features = self.z_depth_net(layer_inp)
 
@@ -747,7 +788,8 @@ class ConvSpair(SpairBase):
         self.z_depth = depth
 
         # --- z_presence ---
-        layer_inp = torch.cat([backbone_features, passthru_features, local_bbox, attr, depth], dim=1)
+        layer_inp = torch.cat(
+            [backbone_features, passthru_features, local_bbox, attr, depth], dim=1)
 
         if RunManager.run_args.z_pres == 'self_attention':
             pres_logit = self.z_pres_self_attn(layer_inp)
@@ -777,19 +819,22 @@ class ConvSpair(SpairBase):
         cy_std, cx_std, height_std, width_std = torch.chunk(std, 4, dim=1)
 
         if RunManager.run_args.use_z_where_decoder:
-            cy_logits, log_q_y = self._sample_z(cy_mean, cy_std, 'cy_logit', save_dist=False, log_prob=True)
-            cx_logits, log_q_x = self._sample_z(cx_mean, cx_std, 'cx_logit', save_dist=False, log_prob=True)
-            height_logits, log_q_h = self._sample_z(height_mean, height_std, 'height_logit', save_dist=False,
+            cy_logits, log_q_y = self._sample_z(cy_mean, cy_std, 'cy_logit',
+                                                save_dist=False, log_prob=True)
+            cx_logits, log_q_x = self._sample_z(cx_mean, cx_std, 'cx_logit',
+                                                save_dist=False, log_prob=True)
+            height_logits, log_q_h = self._sample_z(height_mean, height_std,
+                                                    'height_logit', save_dist=False,
                                                     log_prob=True)
-            width_logits, log_q_w = self._sample_z(width_mean, width_std, 'width_logit', save_dist=False, log_prob=True)
+            width_logits, log_q_w = self._sample_z(width_mean, width_std, 'width_logit',
+                                                   save_dist=False, log_prob=True)
 
             def kl_loss(log_q_z, zk, log_det_jacobian):
                 p_zk = -0.5 * zk * zk
-                kl = (log_q_z - p_zk).sum(dim=[-1,-2])
-                loss = kl - log_det_jacobian.sum(dim=[-1,-2])
+                kl = (log_q_z - p_zk).sum(dim=[-1, -2])
+                loss = kl - log_det_jacobian.sum(dim=[-1, -2])
                 mean_loss = loss.mean()
                 return mean_loss
-
 
             cx_logits, lgj_x = self.NF_planar_x(cx_logits, z_where_h)
             x_loss = kl_loss(log_q_x, cx_logits, lgj_x)
@@ -816,12 +861,13 @@ class ConvSpair(SpairBase):
             # TODO Important freeze learning
 
             cx_logits, cy_logits, height_logits, width_logits, self.normalizing_flow_loss = \
-                self._freeze_learning(cx_logits, cy_logits, height_logits, width_logits, normalizing_flow_loss )
+                self._freeze_learning(cx_logits, cy_logits, height_logits, width_logits,
+                                      normalizing_flow_loss)
         else:
             cy_logits = self._sample_z(cy_mean, cy_std, 'cy_logit')
             cx_logits = self._sample_z(cx_mean, cx_std, 'cx_logit')
             height_logits = self._sample_z(height_mean, height_std, 'height_logit')
-            width_logits= self._sample_z(width_mean, width_std, 'width_logit')
+            width_logits = self._sample_z(width_mean, width_std, 'width_logit')
 
         cell_y = clamped_sigmoid(cy_logits)  # single digit
         cell_x = clamped_sigmoid(cx_logits)
@@ -859,8 +905,10 @@ class ConvSpair(SpairBase):
 
         # box centre mapped with respect to full image
         _, H, W = self.feature_space_dim
-        h_offset = torch.arange(0, H, dtype=torch.float32,).unsqueeze(-1).expand_as(cell_y).to(RunManager.device)
-        w_offset = torch.arange(0, W, dtype=torch.float32,).expand_as(cell_x).to(RunManager.device)
+        h_offset = torch.arange(0, H, dtype=torch.float32, ).unsqueeze(-1).expand_as(
+            cell_y).to(RunManager.device)
+        w_offset = torch.arange(0, W, dtype=torch.float32, ).expand_as(cell_x).to(
+            RunManager.device)
         yt = (self.pixels_per_cell[0] / image_height) * (cell_y + h_offset)
         xt = (self.pixels_per_cell[1] / image_width) * (cell_x + w_offset)
 
@@ -871,7 +919,7 @@ class ConvSpair(SpairBase):
 
         return box, normalized_box
 
-    def _sample_z(self, mean, var, name, save_dist = True, log_prob = False):
+    def _sample_z(self, mean, var, name, save_dist=True, log_prob=False):
         '''
         Performs the sampling step in VAE and stores the distribution for KL computation
         :param mean:
@@ -888,6 +936,7 @@ class ConvSpair(SpairBase):
             return sampled, dist.log_prob(sampled)
         return sampled
 
+
 class ObjectConvEncoder(nn.Module):
 
     def __init__(self, input_size, output_size):
@@ -902,7 +951,7 @@ class ObjectConvEncoder(nn.Module):
 
             if 'filters' in layer.keys():
                 f = layer.pop('filters')
-                layer['out_channels'] = f #rename
+                layer['out_channels'] = f  # rename
             else:
                 f = layer['out_channels']
 
@@ -921,6 +970,7 @@ class ObjectConvEncoder(nn.Module):
         out = self.out_net(conv_out_flat)
         return out
 
+
 class ObjectConvDecoder(nn.Module):
 
     def __init__(self, input_size, output_channel):
@@ -929,27 +979,26 @@ class ObjectConvDecoder(nn.Module):
         net = OrderedDict()
 
         last = len(cfg.CONV_OBJECT_ENCODER_TOPOLOGY) - 1
-        decoder_topo = cfg.CONV_OBJECT_ENCODER_TOPOLOGY[::-1] # Reverses list
+        decoder_topo = cfg.CONV_OBJECT_ENCODER_TOPOLOGY[::-1]  # Reverses list
         # Builds internal layers except for the last layer
         for i, layer in enumerate(decoder_topo):
             layer['in_channels'] = n_prev
 
             if 'filters' in layer.keys():
                 f = layer.pop('filters')
-                layer['out_channels'] = f #rename
+                layer['out_channels'] = f  # rename
             else:
                 f = layer['out_channels']
 
             net['conv_transposed_%d' % i] = nn.ConvTranspose2d(**layer)
 
-
             net['act_%d' % i] = ReLU()
             n_prev = f
 
-        net['out'] = nn.ConvTranspose2d(in_channels=f, out_channels=output_channel, kernel_size=3)
+        net['out'] = nn.ConvTranspose2d(in_channels=f, out_channels=output_channel,
+                                        kernel_size=3)
         self.conv = Sequential(net)
         self.latent_to_conv = nn.Linear(input_size, 256)
-
 
     def forward(self, x):
 
@@ -958,6 +1007,7 @@ class ObjectConvDecoder(nn.Module):
 
         return conv_out
 
+
 class Self_Attn(nn.Module):
     """ Self attention Layer without value look up (replace with alpha channel during rendering)"""
 
@@ -965,9 +1015,12 @@ class Self_Attn(nn.Module):
         super(Self_Attn, self).__init__()
         self.chanel_in = in_dim
 
-        self.query_conv = nn.Conv2d(in_channels=in_dim, out_channels=in_dim // 8, kernel_size=1)
-        self.key_conv = nn.Conv2d(in_channels=in_dim, out_channels=in_dim // 8, kernel_size=1)
-        self.value_conv = nn.Conv2d(in_channels=in_dim, out_channels=in_dim, kernel_size=1)
+        self.query_conv = nn.Conv2d(in_channels=in_dim, out_channels=in_dim // 8,
+                                    kernel_size=1)
+        self.key_conv = nn.Conv2d(in_channels=in_dim, out_channels=in_dim // 8,
+                                  kernel_size=1)
+        self.value_conv = nn.Conv2d(in_channels=in_dim, out_channels=in_dim,
+                                    kernel_size=1)
         self.gamma = nn.Parameter(torch.zeros(1))
 
         self.softmax = nn.Softmax(dim=-1)  #
@@ -981,12 +1034,14 @@ class Self_Attn(nn.Module):
                 attention: B X N X N (N is Width*Height)
         """
         m_batchsize, C, width, height = x.size()
-        proj_query = self.query_conv(x).view(m_batchsize, -1, width * height).permute(0, 2, 1)  # B X CX(N)
-        proj_key = self.key_conv(x).view(m_batchsize, -1, width * height)  # B X C x (*W*H)
+        proj_query = self.query_conv(x).view(m_batchsize, -1, width * height).permute(0,
+                                                                                      2,
+                                                                                      1)  # B X CX(N)
+        proj_key = self.key_conv(x).view(m_batchsize, -1,
+                                         width * height)  # B X C x (*W*H)
         energy = torch.bmm(proj_query, proj_key)  # transpose check
         attention = self.softmax(energy).permute(0, 2, 1)  # BX (N) X (N)
         # proj_value = self.value_conv(x).view(m_batchsize, -1, width * height)  # B X C X N
-
 
         # out = torch.bmm(proj_value, attention.permute(0, 2, 1))
         # out = out.view(m_batchsize, C, width, height)
@@ -994,6 +1049,3 @@ class Self_Attn(nn.Module):
         # TODO Temporary sol
         # out_tmp = out.sum(dim=1, keepdim=True)
         return attention
-
-
-

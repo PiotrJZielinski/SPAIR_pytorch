@@ -1,7 +1,8 @@
-import torch
 import numpy as np
+import torch
+
 from spair import config as cfg
-from spair.manager import RunManager
+
 
 def mAP(z_where, z_pres, ground_truth_bbox, truth_bbox_digit_count):
     '''
@@ -10,13 +11,12 @@ def mAP(z_where, z_pres, ground_truth_bbox, truth_bbox_digit_count):
     WARNING: Assumes z_where and ground_truth_box both contain localization information in [X, Y, W, H] Format
     '''
 
-
     image_size = cfg.INPUT_IMAGE_SHAPE[-1]
     batch_size = z_where.shape[0]
 
     # clean up z_where to match ground_truth
     z_where = z_where.detach() * image_size
-    z_where = z_where.detach().permute(0,2,3,1).contiguous().view(batch_size, -1, 4)
+    z_where = z_where.detach().permute(0, 2, 3, 1).contiguous().view(batch_size, -1, 4)
     z_pres = z_pres.detach().permute(0, 2, 3, 1).contiguous().view(batch_size, -1, 1)
 
     # Move xy from center of symbol to top left
@@ -34,15 +34,19 @@ def mAP(z_where, z_pres, ground_truth_bbox, truth_bbox_digit_count):
 
     bbox_ious = batch_jaccard(z_where_masked, ground_truth_bbox)
     # choose the best output bbox to match label bbox
-    best_bbox_iou, argbest_bbox_iout = torch.max(bbox_ious, dim=1)# [0] because max returns both max and argmax
+    best_bbox_iou, argbest_bbox_iout = torch.max(bbox_ious,
+                                                 dim=1)  # [0] because max returns both max and argmax
     # TODO Add proper AP threshold in place
-    sorted_best_bbox_ious = sort_iou_by_confidence_across_batch(best_bbox_iou, argbest_bbox_iout, z_pres)
+    sorted_best_bbox_ious = sort_iou_by_confidence_across_batch(best_bbox_iou,
+                                                                argbest_bbox_iout,
+                                                                z_pres)
     sorted_best_bbox_ious = sorted_best_bbox_ious.cpu()
 
     # Compute AP
 
     cs = sorted_best_bbox_ious.cumsum(dim=0)
-    precision = cs / (torch.arange(sorted_best_bbox_ious.shape[0], dtype=torch.float) + 1)
+    precision = cs / (
+                torch.arange(sorted_best_bbox_ious.shape[0], dtype=torch.float) + 1)
     n_positives_gt = truth_bbox_digit_count.sum()
     recall_values = torch.linspace(0.0, 1.0, 11, dtype=torch.float)
     recall = cs / n_positives_gt
@@ -58,12 +62,13 @@ def mAP(z_where, z_pres, ground_truth_bbox, truth_bbox_digit_count):
     ap_scale = torch.tensor([0.0, 0.5], dtype=torch.float)
     scaled_iou = torch.clamp((bbox_iou - ap_scale) / (1 - ap_scale), min=0, max=1)
 
-
     # find the mean average precision (mAP)
     ap = scaled_iou.mean(dim=(-1))
-    mean_ap = ap.sum(dim=-1, keepdim=True) / truth_bbox_digit_count.cpu() # normalize by num bboxes in label
+    mean_ap = ap.sum(dim=-1,
+                     keepdim=True) / truth_bbox_digit_count.cpu()  # normalize by num bboxes in label
     mean_ap = mean_ap.mean()
     return mean_ap
+
 
 def mAP_igiveup(z_where, z_pres, ground_truth_bbox, truth_bbox_digit_count):
     '''
@@ -72,13 +77,12 @@ def mAP_igiveup(z_where, z_pres, ground_truth_bbox, truth_bbox_digit_count):
     WARNING: Assumes z_where and ground_truth_box both contain localization information in [X, Y, W, H] Format
     '''
 
-
     image_size = cfg.INPUT_IMAGE_SHAPE[-1]
     batch_size = z_where.shape[0]
 
     # clean up z_where to match ground_truth
     z_where = z_where.detach() * image_size
-    z_where = z_where.detach().permute(0,2,3,1).contiguous().view(batch_size, -1, 4)
+    z_where = z_where.detach().permute(0, 2, 3, 1).contiguous().view(batch_size, -1, 4)
     z_pres = z_pres.detach().permute(0, 2, 3, 1).contiguous().view(batch_size, -1, 1)
 
     # Move xy from center of symbol to top left
@@ -87,13 +91,16 @@ def mAP_igiveup(z_where, z_pres, ground_truth_bbox, truth_bbox_digit_count):
     z_where[..., 2:] += z_where[..., :2]
     ground_truth_bbox[..., 2:] += ground_truth_bbox[..., :2]
 
-    z_where_top_bottom_left_right = z_where[...,[1,3,0,2]]
-    pred_boxes = torch.cat([z_pres, z_where_top_bottom_left_right], dim=-1).cpu().numpy()
-    gt_boxes = ground_truth_bbox[...,[1,3,0,2]].cpu().numpy()
+    z_where_top_bottom_left_right = z_where[..., [1, 3, 0, 2]]
+    pred_boxes = torch.cat([z_pres, z_where_top_bottom_left_right],
+                           dim=-1).cpu().numpy()
+    gt_boxes = ground_truth_bbox[..., [1, 3, 0, 2]].cpu().numpy()
     gt_count = truth_bbox_digit_count.squeeze().cpu().int().numpy()
     iou_threshold = np.arange(0.1, 0.9, 0.1)
-    mAP = mAP_crawford(pred_boxes, gt_boxes, gt_count, iou_threshold=iou_threshold) # TODO Add threshold
+    mAP = mAP_crawford(pred_boxes, gt_boxes, gt_count,
+                       iou_threshold=iou_threshold)  # TODO Add threshold
     return mAP
+
 
 def sort_iou_by_confidence_across_batch(best_bbox, best_bbox_idx, z_pres):
     ''' Sort the selected bboxes and sort it by confidence level (z_pres), returns only the IOU ratio of bbox. '''
@@ -108,14 +115,14 @@ def sort_iou_by_confidence_across_batch(best_bbox, best_bbox_idx, z_pres):
     return sorted_best_bbox
 
 
-def object_count_accuracy(z_pres:torch.Tensor, truth_bbox_digit_count):
-
+def object_count_accuracy(z_pres: torch.Tensor, truth_bbox_digit_count):
     batch_size = cfg.BATCH_SIZE
     z_pres = z_pres.permute(0, 2, 3, 1).contiguous().view(batch_size, -1, 1)
-    z_pres_count = z_pres.round().sum(dim = -2)
+    z_pres_count = z_pres.round().sum(dim=-2)
 
     count_accuracy = (truth_bbox_digit_count - z_pres_count).mean()
     return count_accuracy
+
 
 def intersect(box_a, box_b):
     """ We resize both tensors to [A,B,2] without new malloc:
@@ -139,6 +146,7 @@ def intersect(box_a, box_b):
     inter = torch.clamp((max_xy - min_xy), min=0)
     return inter[..., 0] * inter[..., 1]
 
+
 def batch_jaccard(box_a, box_b):
     """Compute the jaccard overlap of two sets of boxes.  The jaccard overlap
     is simply the intersection over union of two boxes.  Here we operate on
@@ -152,12 +160,13 @@ def batch_jaccard(box_a, box_b):
         jaccard overlap: (tensor) Shape: [box_a.size(0), box_b.size(0)]
     """
     inter = intersect(box_a, box_b)
-    area_a = ((box_a[..., 2]-box_a[..., 0]) *
-              (box_a[..., 3]-box_a[..., 1])).unsqueeze(2).expand_as(inter)  # [A,B]
-    area_b = ((box_b[..., 2]-box_b[..., 0]) *
-              (box_b[..., 3]-box_b[..., 1])).unsqueeze(1).expand_as(inter)  # [A,B]
+    area_a = ((box_a[..., 2] - box_a[..., 0]) *
+              (box_a[..., 3] - box_a[..., 1])).unsqueeze(2).expand_as(inter)  # [A,B]
+    area_b = ((box_b[..., 2] - box_b[..., 0]) *
+              (box_b[..., 3] - box_b[..., 1])).unsqueeze(1).expand_as(inter)  # [A,B]
     union = area_a + area_b - inter
     return inter / union  # [A,B]
+
 
 # ------ Below are Eric Crawford's implementation for testing purposes ---------
 
@@ -175,6 +184,7 @@ def compute_iou(box, others):
 
     return overlap_area / (box[4] + others[:, 4] - overlap_area)
 
+
 def coords_to_pixel_space(y, x, h, w, image_shape, anchor_box, top_left):
     h = h * anchor_box[0]
     w = w * anchor_box[1]
@@ -188,7 +198,9 @@ def coords_to_pixel_space(y, x, h, w, image_shape, anchor_box, top_left):
 
     return y, x, h, w
 
-def mAP_crawford(pred_boxes, gt_boxes, gt_boxes_count, recall_values=None, iou_threshold=None):
+
+def mAP_crawford(pred_boxes, gt_boxes, gt_boxes_count, recall_values=None,
+                 iou_threshold=None):
     """ Calculate mean average precision on a dataset.
 
     Averages over:
@@ -211,7 +223,8 @@ def mAP_crawford(pred_boxes, gt_boxes, gt_boxes_count, recall_values=None, iou_t
 
             # Sort by decreasing confidence within current class.
             pred_c = sorted(pred, key=lambda k: -k[0])
-            area = [(ymax - ymin) * (xmax - xmin) for _, ymin, ymax, xmin, xmax in pred_c]
+            area = [(ymax - ymin) * (xmax - xmin) for _, ymin, ymax, xmin, xmax in
+                    pred_c]
             pred_c = [(*b, a) for b, a in zip(pred_c, area)]
 
             gt_c = gt
@@ -239,7 +252,8 @@ def mAP_crawford(pred_boxes, gt_boxes, gt_boxes_count, recall_values=None, iou_t
             continue
 
         # Sort predictions by decreasing confidence.
-        predicted_list = np.array(sorted(predicted_list, key=lambda k: -k[0]), dtype=np.float32)
+        predicted_list = np.array(sorted(predicted_list, key=lambda k: -k[0]),
+                                  dtype=np.float32)
 
         # Compute AP
         cs = np.cumsum(predicted_list[:, 1])
@@ -256,13 +270,14 @@ def mAP_crawford(pred_boxes, gt_boxes, gt_boxes_count, recall_values=None, iou_t
 class AP:
     keys_accessed = "normalized_box obj annotations n_annotations"
 
-    def __init__(self, iou_threshold=None, start_frame=0, end_frame=np.inf, is_training=False):
+    def __init__(self, iou_threshold=None, start_frame=0, end_frame=np.inf,
+                 is_training=False):
         if iou_threshold is not None:
             try:
                 iou_threshold = list(iou_threshold)
             except (TypeError, ValueError):
                 iou_threshold = [float(iou_threshold)]
-        self.iou_threshold = iou_threshold # FIXME [0.1:0.1:0.9]
+        self.iou_threshold = iou_threshold  # FIXME [0.1:0.1:0.9]
 
         self.start_frame = start_frame
         self.end_frame = end_frame
@@ -310,7 +325,8 @@ class AP:
         return obj, n_digits, top, left, height, width, annotations, n_annotations
 
     def __call__(self, tensors, updater):
-        obj, n_digits, top, left, height, width, annotations, n_annotations = self._process_data(tensors, updater)
+        obj, n_digits, top, left, height, width, annotations, n_annotations = self._process_data(
+            tensors, updater)
 
         bottom = top + height
         right = left + width

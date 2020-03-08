@@ -1,8 +1,10 @@
-import torch
 from torch.utils import data as torch_data
+
 from spair import config as cfg
 from spair.logging import *
+
 instance = None
+
 
 class RunManager():
     ''' Singleton class for manage all run session related configurations and manages the main run loop '''
@@ -13,7 +15,7 @@ class RunManager():
     run_args = None
     run_name = None
 
-    def __init__(self,run_name, dataset, device, writer, run_args):
+    def __init__(self, run_name, dataset, device, writer, run_args):
         instance = self
         self.reset(run_name, dataset, device, writer, run_args)
 
@@ -25,7 +27,6 @@ class RunManager():
         RunManager.run_args = run_args
         RunManager.global_step = 0
         self.__log_meta_data()
-
 
     def iterate_data(self):
         ''' Dataset iterator class '''
@@ -60,8 +61,6 @@ class RunManager():
 
     def get_instance(self):
         return instance
-
-
 
 
 def get_run_manager_session():

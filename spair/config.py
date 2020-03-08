@@ -5,33 +5,34 @@ from enum import Enum
 GPU = True
 Z_Prior = Enum('Z_Prior', 'NONE UNIFORM ORIGINAL')
 SpairType = Enum('SpairType', 'SEQUENTIAL CONV')
+
+
 class RunConfig():
-    def __init__(self, gpu=True, z_prior=Z_Prior.NONE, spair_type=SpairType.SEQUENTIAL, ):
+    def __init__(self, gpu=True, z_prior=Z_Prior.NONE,
+                 spair_type=SpairType.SEQUENTIAL, ):
         self.gpu = gpu
         self.z_prior = z_prior
         self.spair_type = spair_type
         pass
 
 
-
-
 BATCH_SIZE = 32
-INPUT_IMAGE_SHAPE = [1, 128, 128] # originally 128 128 TODO change me back
+INPUT_IMAGE_SHAPE = [1, 128, 128]  # originally 128 128 TODO change me back
 
 DEFAULT_MLP_TOPOLOGY = [100, 100]
 DEFAULT_BACKBONE_TOPOLOGY = [
-    dict(out_channels=128, kernel_size=4, stride=3), # out_channels = filters
+    dict(out_channels=128, kernel_size=4, stride=3),  # out_channels = filters
     dict(out_channels=128, kernel_size=4, stride=2),
     dict(out_channels=128, kernel_size=4, stride=2),
     dict(out_channels=128, kernel_size=1, stride=1),
     dict(out_channels=128, kernel_size=1, stride=1),
     dict(out_channels=128, kernel_size=1, stride=1),
 ]
-CONV_OBJECT_ENCODER_TOPOLOGY = [ # Decoder is the opposite topology
-    dict(out_channels=16, kernel_size=4, stride=2), # (32, 13, 13)
-    dict(out_channels=16, kernel_size=4, stride=2), # (32, 5, 5)
-    dict(out_channels=16, kernel_size=2, stride=1), # (32, 5, 5)
-    dict(out_channels=16, kernel_size=1, stride=1), # (32, 2, 2)
+CONV_OBJECT_ENCODER_TOPOLOGY = [  # Decoder is the opposite topology
+    dict(out_channels=16, kernel_size=4, stride=2),  # (32, 13, 13)
+    dict(out_channels=16, kernel_size=4, stride=2),  # (32, 5, 5)
+    dict(out_channels=16, kernel_size=2, stride=1),  # (32, 5, 5)
+    dict(out_channels=16, kernel_size=1, stride=1),  # (32, 2, 2)
 ]
 
 N_BACKBONE_FEATURES = 100
@@ -45,9 +46,8 @@ N_CONTEXT_DIM = 4 + N_ATTRIBUTES + 1 + 1
 # Defines the range in which neighbouring cells are sampled to compute lateral context
 N_LOOKBACK = 1
 
-OBJECT_SHAPE = [28,28]
-ANCHORBOX_SHAPE = [48, 48] # TODO 48 x 48
-
+OBJECT_SHAPE = [28, 28]
+ANCHORBOX_SHAPE = [48, 48]  # TODO 48 x 48
 
 # Bounding box stuff, it's the maximum range relative to anchor box
 MAX_YX = 1.5
@@ -55,41 +55,38 @@ MIN_YX = -0.5
 MAX_HW = 1.0
 MIN_HW = 0.0
 
-
 # VAE Priors, used to KL computation {name:[mean, std]}
 PRIORS = {
-    'cy_logit':[0., 1.],
-    'cx_logit':[0., 1.],
+    'cy_logit': [0., 1.],
+    'cx_logit': [0., 1.],
     # 'height_logit':[3., 0.5], # Larger prior for 28 x 28, and this is now defined in run_args
     # 'width_logit':[3., 0.5],
-    'attr':[0., 1.],
-    'depth_logit':[0., 1.],
+    'attr': [0., 1.],
+    'depth_logit': [0., 1.],
 }
 
 # Beta factor for Beta VAE
 VAE_BETA = 1
 
 # training wheels
-LATENT_VAR_TRAINING_WHEEL_PARAM = dict(start = 1.0, # 1.0
-                                       end = 0.0,
-                                       decay_rate = 0.0,
-                                       decay_step = 1000.,
-                                       staircase = True)
+LATENT_VAR_TRAINING_WHEEL_PARAM = dict(start=1.0,  # 1.0
+                                       end=0.0,
+                                       decay_rate=0.0,
+                                       decay_step=1000.,
+                                       staircase=True)
 
 # Dyanmic prior used by the object presence latent variable
-OBJ_PRES_COUNT_LOG_PRIOR = dict(start = 1000000.0,
-                                       end = 0.0125,
-                                       decay_rate=0.1,
-                                       decay_step = 1000.,
-                                       log_space = True)
-
+OBJ_PRES_COUNT_LOG_PRIOR = dict(start=1000000.0,
+                                end=0.0125,
+                                decay_rate=0.1,
+                                decay_step=1000.,
+                                log_space=True)
 
 # Decoder bias:
 
 OBJ_LOGIT_SCALE = 2.0
 ALPHA_LOGIT_SCALE = 0.1
 ALPHA_LOGIT_BIAS = 5.0
-
 
 # environment variables
 

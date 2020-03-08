@@ -1,5 +1,7 @@
 from unittest import TestCase
+
 from spair.modules import Backbone
+
 
 class TestBackbone(TestCase):
 
