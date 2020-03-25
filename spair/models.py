@@ -3,7 +3,7 @@ import itertools
 from torch.distributions import Normal, Uniform
 from torch.distributions.kl import kl_divergence
 
-from spair import flow_model as fnn
+from spair import flow_model as fnn, debug_tools
 from spair.manager import RunManager
 from spair.modules import *
 from spair.modules import Backbone, build_MLP
