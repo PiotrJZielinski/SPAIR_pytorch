@@ -35,7 +35,7 @@ class SpairBase(nn.Module):
 
         # Loss is only used by masked autoregressive flow decoder
         self.normalizing_flow_loss = 0
-        print("model initialized")
+        # print("model initialized")
 
     def forward(self, x):
         debug_tools.benchmark_init()

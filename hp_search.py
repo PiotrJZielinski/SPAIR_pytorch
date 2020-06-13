@@ -94,7 +94,7 @@ def train(run_manager):
         spair_net = Spair(image_shape)
     else:
         spair_net = ConvSpair(image_shape)
-        print("Running with CONV spair")
+        # print("Running with CONV spair")
 
     if continue_training(run_manager.run_args) is not None:
         model_dict, global_step = continue_training(run_manager.run_args)

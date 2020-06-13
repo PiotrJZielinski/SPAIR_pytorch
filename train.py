@@ -7,6 +7,7 @@ import torch
 from coolname import generate_slug
 from tensorboardX import SummaryWriter
 from torch import optim
+from tqdm.auto import tqdm
 
 from spair import config as cfg
 from spair import debug_tools
@@ -79,14 +80,16 @@ def train(run_manager):
     debug_tools.benchmark_init()
     # Main training loop
 
-    for global_step, batch in run_manager.iterate_data():
+    for global_step, batch in tqdm(
+        run_manager.iterate_data(), total=run_manager.run_args.max_iter
+    ):
 
         x_image, y_bbox, y_digit_count = batch
         x_image = x_image.to(device)
         y_bbox = y_bbox.to(device)
         y_digit_count = y_digit_count.to(device)
 
-        log("Iteration", global_step)
+        # log("Iteration", global_step)
         debug_tools.benchmark_init()
         spair_optim.zero_grad()
         loss, out_img, z_where, z_pres = spair_net(x_image)

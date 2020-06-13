@@ -6,3 +6,4 @@ Pillow
 h5py
 coolname
 tensorboardX
+tqdm
