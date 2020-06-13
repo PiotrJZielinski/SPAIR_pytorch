@@ -12,7 +12,7 @@ from tqdm.auto import tqdm
 from spair import config as cfg
 from spair import debug_tools
 from spair import metric
-from spair.dataloader import SimpleScatteredMNISTDataset
+from spair.dataloader import MultiScaleMNIST
 from spair.logging import *
 from spair.manager import RunManager
 from spair.models import ConvSpair, Spair
@@ -31,7 +31,7 @@ def main():
     device = torch.device("cuda" if (torch.cuda.is_available() and args.gpu) else "cpu")
     dataset_path = "data/" + args.dataset_filename
     dataset_subset_name = args.dataset_subset
-    data = SimpleScatteredMNISTDataset(dataset_path, dataset_subset_name)
+    data = MultiScaleMNIST(dataset_path, dataset_subset_name)
 
     run_manager = RunManager(
         run_name=run_name, dataset=data, device=device, writer=writer, run_args=args
@@ -100,9 +100,9 @@ def train(run_manager):
 
         # Log average precision metric every 5 step after 1000 iterations (when trainig_wheel is off)
         if global_step > 1000 and global_step % 100 == 0:  # global_step > 1000 and
-            meanAP = metric.mAP_igiveup(z_where, z_pres, y_bbox, y_digit_count)
-            log("Bbox Average Precision:", meanAP.item())
-            writer.add_scalar("accuracy/bbox_average_precision", meanAP, global_step)
+            # meanAP = metric.mAP_igiveup(z_where, z_pres, y_bbox, y_digit_count)
+            # log("Bbox Average Precision:", meanAP.item())
+            # writer.add_scalar("accuracy/bbox_average_precision", meanAP, global_step)
 
             count_accuracy = metric.object_count_accuracy(z_pres, y_digit_count)
             writer.add_scalar(
@@ -219,7 +219,7 @@ def parse_args(run_log_path):
     parser.add_argument(
         "--dataset_filename",
         type=str,
-        default="scattered_mnist_128x128_obj14x14.hdf5",
+        default="multiscalemnist.hdf5",
         help="name of the dataset",
     )
 
