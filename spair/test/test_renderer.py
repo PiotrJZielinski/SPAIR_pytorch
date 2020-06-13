@@ -12,7 +12,7 @@ def test():
     z_pres = torch.ones([batch, 1, grid_size, grid_size])
 
     hw = 1 / 11
-    where = torch.tensor([0., 0., hw, hw, ])[None, :, None, None]
+    where = torch.tensor([0.0, 0.0, hw, hw,])[None, :, None, None]
     z_where = where.repeat([batch, 1, grid_size, grid_size])
     offsets = torch.linspace(0, 1, steps=12)[:-1]
     z_where[0, 0, :, :] += offsets
@@ -28,22 +28,23 @@ def test():
 
     object_logits = torch.cat([objects, alpha], dim=-1)
     # flattening for testing
-    object_logits = object_logits.view(batch * grid_size * grid_size,
-                                       obj_size * obj_size * 2)
+    object_logits = object_logits.view(
+        batch * grid_size * grid_size, obj_size * obj_size * 2
+    )
     _render(object_logits, z_where, z_depth, z_pres)
-    print('hello')
+    print("hello")
     pass
 
 
 def _render(object_logits, z_where, z_depth, z_pres):
-    '''
+    """
     decoder + renderer function. combines the latent vars & bbox, feed into the decoder for each object and then
     :param z_attr:
     :param z_where:
     :param z_depth:
     :param z_pres:
     :return:
-    '''
+    """
     H, W = 11, 11
     px = cfg.OBJECT_SHAPE[0]
 
@@ -60,8 +61,9 @@ def _render(object_logits, z_where, z_depth, z_pres):
     # MLP to generate image
     # object_logits = self.object_decoder(object_decoder_in)
     input_chan_w_alpha = cfg.INPUT_IMAGE_SHAPE[0] + 1
-    object_logits = object_logits.view(-1, px, px,
-                                       input_chan_w_alpha)  # [Batch * n_cells, pixels_w, pixels_h, channels]
+    object_logits = object_logits.view(
+        -1, px, px, input_chan_w_alpha
+    )  # [Batch * n_cells, pixels_w, pixels_h, channels]
 
     # object_logits scale + bias mask
     object_logits[:, :, :, :-1] *= cfg.OBJ_LOGIT_SCALE  # [B, 14, 14, 4] * [4]
@@ -80,8 +82,9 @@ def _render(object_logits, z_where, z_depth, z_pres):
 
     # Merge importance to objects:
     importance = importance[..., None]  # add a trailing dim for concatnation
-    objects = torch.cat([objects, importance],
-                        dim=-1)  # attach importance to RGBA, 5 channels to total
+    objects = torch.cat(
+        [objects, importance], dim=-1
+    )  # attach importance to RGBA, 5 channels to total
 
     debug_tools.plot_prerender_components(objects, z_pres, z_depth, z_where, None, 0)
     # ---- exiting B x H x W x C realm .... ----
@@ -90,10 +93,12 @@ def _render(object_logits, z_where, z_depth, z_pres):
 
     img_c, img_h, img_w, = (1, 128, 128)
     n_obj = H * W  # max number of objects in a grid
-    transformed_imgs = stn(objects_, z_where, [img_h, img_w], torch.device('cpu'),
-                           inverse=True)
-    transformed_objects = transformed_imgs.contiguous().view(-1, n_obj, img_c + 2,
-                                                             img_h, img_w)
+    transformed_imgs = stn(
+        objects_, z_where, [img_h, img_w], torch.device("cpu"), inverse=True
+    )
+    transformed_objects = transformed_imgs.contiguous().view(
+        -1, n_obj, img_c + 2, img_h, img_w
+    )
     # incorporate alpha
     # FIXME The original implement doesn't seem to be calculating alpha correctly.
     #  If multiple objects overlap one pixel, alpha is only computed against background
@@ -103,9 +108,10 @@ def _render(object_logits, z_where, z_depth, z_pres):
 
     input_chan = cfg.INPUT_IMAGE_SHAPE[0]
     color_channels = transformed_objects[:, :, :input_chan, :, :]
-    alpha = transformed_objects[:, :, input_chan:input_chan + 1, :,
-            :]  # keep the empty dim
-    importance = transformed_objects[:, :, input_chan + 1:input_chan + 2, :, :]
+    alpha = transformed_objects[
+        :, :, input_chan : input_chan + 1, :, :
+    ]  # keep the empty dim
+    importance = transformed_objects[:, :, input_chan + 1 : input_chan + 2, :, :]
 
     img = alpha.expand_as(color_channels) * color_channels
 
@@ -120,5 +126,5 @@ def _render(object_logits, z_where, z_depth, z_pres):
     return output_image
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     test()

@@ -18,8 +18,8 @@ from spair.models import ConvSpair, Spair
 
 
 def main():
-    run_name = datetime.today().strftime('%b-%d') + '-' + generate_slug(2)
-    log_path = 'logs/hp_search/%s' % run_name
+    run_name = datetime.today().strftime("%b-%d") + "-" + generate_slug(2)
+    log_path = "logs/hp_search/%s" % run_name
     writer = SummaryWriter(log_path)
     run_args = parse_args(log_path)
     # Setup TensorboardX writer
@@ -27,8 +27,9 @@ def main():
     init_logger(log_path)
 
     device = torch.device(
-        "cuda" if (torch.cuda.is_available() and run_args.gpu) else "cpu")
-    dataset_path = 'data/' + run_args.dataset_filename
+        "cuda" if (torch.cuda.is_available() and run_args.gpu) else "cpu"
+    )
+    dataset_path = "data/" + run_args.dataset_filename
     dataset_subset_name = run_args.dataset_subset
 
     hp_min, hp_max = run_args.hp_search_range
@@ -38,24 +39,29 @@ def main():
         # Randomly select a set of HP for the random search
         best_one_yet = 5.013100487582577
         random_set = np.concatenate(
-            ([best_one_yet], np.random.uniform(hp_min, hp_max, steps)))
+            ([best_one_yet], np.random.uniform(hp_min, hp_max, steps))
+        )
         for hw_mean in random_set:
 
             run_args.hw_prior = [hw_mean, 0.5]
-            log('=== Running with HW Mean:', hw_mean)
+            log("=== Running with HW Mean:", hw_mean)
 
             # Resetting RunManager
-            log_sub_path = '{}_hp_{}'.format(log_path, hw_mean)
+            log_sub_path = "{}_hp_{}".format(log_path, hw_mean)
             writer = SummaryWriter(log_sub_path)
-            run_manager = reset_run(run_name, device, writer, run_args, dataset_path,
-                                    dataset_subset_name)
+            run_manager = reset_run(
+                run_name, device, writer, run_args, dataset_path, dataset_subset_name
+            )
 
             if not cfg.IS_LOCAL:
                 try:
                     train(run_manager)
                 except Exception as e:
-                    telegram_yonk('An error had occured:{}, step:{}'.format(run_name,
-                                                                            RunManager.global_step))
+                    telegram_yonk(
+                        "An error had occured:{}, step:{}".format(
+                            run_name, RunManager.global_step
+                        )
+                    )
                     raise e
             else:
                 train(run_manager)
@@ -67,8 +73,9 @@ def main():
 
 def reset_run(run_name, device, writer, run_args, dataset_path, dataset_subset_name):
     data = SimpleScatteredMNISTDataset(dataset_path, dataset_subset_name)
-    run_manager = RunManager(run_name=run_name, dataset=data, device=device,
-                             writer=writer, run_args=run_args)
+    run_manager = RunManager(
+        run_name=run_name, dataset=data, device=device, writer=writer, run_args=run_args
+    )
     return run_manager
 
 
@@ -87,7 +94,7 @@ def train(run_manager):
         spair_net = Spair(image_shape)
     else:
         spair_net = ConvSpair(image_shape)
-        print('Running with CONV spair')
+        print("Running with CONV spair")
 
     if continue_training(run_manager.run_args) is not None:
         model_dict, global_step = continue_training(run_manager.run_args)
@@ -110,7 +117,7 @@ def train(run_manager):
         y_bbox = y_bbox.to(device)
         y_digit_count = y_digit_count.to(device)
 
-        log('Iteration', global_step)
+        log("Iteration", global_step)
         debug_tools.benchmark_init()
         spair_optim.zero_grad()
         loss, out_img, z_where, z_pres = spair_net(x_image)
@@ -122,13 +129,14 @@ def train(run_manager):
         # Log average precision metric every 5 step after 1000 iterations (when trainig_wheel is off)
         if global_step > 1000 and global_step % 50 == 0:  # global_step > 1000 and
             meanAP = metric.mAP_igiveup(z_where, z_pres, y_bbox, y_digit_count)
-            log('Bbox Average Precision:', meanAP.item())
+            log("Bbox Average Precision:", meanAP.item())
             mAP_record.append(meanAP.item())
-            writer.add_scalar('accuracy/bbox_average_precision', meanAP, global_step)
+            writer.add_scalar("accuracy/bbox_average_precision", meanAP, global_step)
 
             count_accuracy = metric.object_count_accuracy(z_pres, y_digit_count)
-            writer.add_scalar('accuracy/object_count_accuracy', count_accuracy,
-                              global_step)
+            writer.add_scalar(
+                "accuracy/object_count_accuracy", count_accuracy, global_step
+            )
 
         # Save model
         if global_step % 100 == 0 and global_step > 0:
@@ -136,14 +144,14 @@ def train(run_manager):
             image_out = out_img[0].detach()
             image_in = x_image[0].detach()
             combined_image = torch.cat([image_in, image_out], dim=2)
-            writer.add_image('SPAIR input_output', combined_image, global_step)
+            writer.add_image("SPAIR input_output", combined_image, global_step)
 
             duration = time.time() - benchmark_time
-            writer.add_scalar('misc/time_taken_per_100_batches', duration, global_step)
-            check_point_name = 'step_%d.pkl' % global_step
-            cp_dir = os.path.join(run_log_path, 'checkpoints')
+            writer.add_scalar("misc/time_taken_per_100_batches", duration, global_step)
+            check_point_name = "step_%d.pkl" % global_step
+            cp_dir = os.path.join(run_log_path, "checkpoints")
             os.makedirs(cp_dir, exist_ok=True)
-            save_path = os.path.join(run_log_path, 'checkpoints', check_point_name)
+            save_path = os.path.join(run_log_path, "checkpoints", check_point_name)
             torch.save(spair_net.state_dict(), save_path)
             benchmark_time = time.time()
 
@@ -157,8 +165,8 @@ def continue_training(args):
 
     log_path = args.continue_from
     checkpoint_num = args.check_point_number
-    filename = 'step_{}.pkl'.format(checkpoint_num)
-    model_pkl = os.path.join('logs/', log_path, 'checkpoints', filename)
+    filename = "step_{}.pkl".format(checkpoint_num)
+    model_pkl = os.path.join("logs/", log_path, "checkpoints", filename)
     model_dict = torch.load(model_pkl)
     return model_dict, checkpoint_num
 
@@ -166,70 +174,124 @@ def continue_training(args):
 def parse_args(run_log_path):
     parser = argparse.ArgumentParser()
     # Run config
-    parser.add_argument('--gpu', help='Enable GPU use', action='store_true')
-    parser.add_argument('--max_iter', type=int, default=10000,
-                        help='max number of iterations to train on')
+    parser.add_argument("--gpu", help="Enable GPU use", action="store_true")
+    parser.add_argument(
+        "--max_iter",
+        type=int,
+        default=10000,
+        help="max number of iterations to train on",
+    )
 
     # Core Algorithm config
-    parser.add_argument('--z_pres', type=str, default='original_prior',
-                        choices=['original_prior', 'no_prior', 'uniform_prior',
-                                 'self_attention'], help='name of the dataset')
+    parser.add_argument(
+        "--z_pres",
+        type=str,
+        default="original_prior",
+        choices=["original_prior", "no_prior", "uniform_prior", "self_attention"],
+        help="name of the dataset",
+    )
 
-    parser.add_argument('--original_spair',
-                        help='Uses sequential SPAIR rather than convolutional SPAIR',
-                        action='store_true')
+    parser.add_argument(
+        "--original_spair",
+        help="Uses sequential SPAIR rather than convolutional SPAIR",
+        action="store_true",
+    )
 
-    parser.add_argument('--conv_neighbourhood', type=int, default=1,
-                        help='kernel size of conv_spair')
-    parser.add_argument('--use_z_where_decoder',
-                        help='Use a decoder to model z_where better',
-                        action='store_true')
+    parser.add_argument(
+        "--conv_neighbourhood", type=int, default=1, help="kernel size of conv_spair"
+    )
+    parser.add_argument(
+        "--use_z_where_decoder",
+        help="Use a decoder to model z_where better",
+        action="store_true",
+    )
 
-    parser.add_argument('--use_uber_trick',
-                        help='Attaches explicit x,y information to input image for better localization',
-                        action='store_true')
+    parser.add_argument(
+        "--use_uber_trick",
+        help="Attaches explicit x,y information to input image for better localization",
+        action="store_true",
+    )
 
-    parser.add_argument('--use_conv_z_attr',
-                        help='Use a conv network to learn z_attr for faster learning',
-                        action='store_true')
+    parser.add_argument(
+        "--use_conv_z_attr",
+        help="Use a conv network to learn z_attr for faster learning",
+        action="store_true",
+    )
 
-    parser.add_argument('--hw_prior', type=float, default=[3., 0.5], nargs=2,
-                        help='z prior for the height and width of bbox')
+    parser.add_argument(
+        "--hw_prior",
+        type=float,
+        default=[3.0, 0.5],
+        nargs=2,
+        help="z prior for the height and width of bbox",
+    )
 
-    parser.add_argument('--backbone_self_attention',
-                        help='Use self attention for backbone network',
-                        action='store_true')
+    parser.add_argument(
+        "--backbone_self_attention",
+        help="Use self attention for backbone network",
+        action="store_true",
+    )
 
     # Dataset config
-    parser.add_argument('--dataset_subset', type=str, default='constant',
-                        choices=['constant', 'full', '1-5'], help='name of the dataset')
+    parser.add_argument(
+        "--dataset_subset",
+        type=str,
+        default="constant",
+        choices=["constant", "full", "1-5"],
+        help="name of the dataset",
+    )
 
-    parser.add_argument('--dataset_filename', type=str,
-                        default='scattered_mnist_128x128_obj14x14.hdf5',
-                        help='name of the dataset')
+    parser.add_argument(
+        "--dataset_filename",
+        type=str,
+        default="scattered_mnist_128x128_obj14x14.hdf5",
+        help="name of the dataset",
+    )
 
     # Logging config
-    parser.add_argument('--log_path', type=str, default=run_log_path,
-                        help='path of to store logging and checkpoints')
+    parser.add_argument(
+        "--log_path",
+        type=str,
+        default=run_log_path,
+        help="path of to store logging and checkpoints",
+    )
 
     # Checkpoint restoration
-    parser.add_argument('--continue_from', type=str, default="",
-                        help='name of run to continue trainig from')
+    parser.add_argument(
+        "--continue_from",
+        type=str,
+        default="",
+        help="name of run to continue trainig from",
+    )
 
-    parser.add_argument('--check_point_number', type=int, default=0,
-                        help='checkpoint number to load from')
+    parser.add_argument(
+        "--check_point_number",
+        type=int,
+        default=0,
+        help="checkpoint number to load from",
+    )
 
     # HP Search configuration
-    parser.add_argument('--hp_search_coarse', help='performs a random search on HP',
-                        action='store_true')
-    parser.add_argument('--hp_search_range', type=float, default=[4.5, 5.5], nargs=2,
-                        help='range of which hp search is performed')
-    parser.add_argument('--hp_search_steps', type=int, default=20,
-                        help='number of steps performed by hyperparameter search')
+    parser.add_argument(
+        "--hp_search_coarse", help="performs a random search on HP", action="store_true"
+    )
+    parser.add_argument(
+        "--hp_search_range",
+        type=float,
+        default=[4.5, 5.5],
+        nargs=2,
+        help="range of which hp search is performed",
+    )
+    parser.add_argument(
+        "--hp_search_steps",
+        type=int,
+        default=20,
+        help="number of steps performed by hyperparameter search",
+    )
 
     args = parser.parse_args()
     return args
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

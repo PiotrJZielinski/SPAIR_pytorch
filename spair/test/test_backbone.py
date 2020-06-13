@@ -4,7 +4,6 @@ from spair.modules import Backbone
 
 
 class TestBackbone(TestCase):
-
     def test_compute_output_shape(self):
         self.backbone = Backbone(input_shape=(32, 3, 128, 128), n_out_channels=100)
         self.backbone.compute_output_shape()

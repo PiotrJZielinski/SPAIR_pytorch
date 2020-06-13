@@ -3,13 +3,14 @@ from enum import Enum
 
 # Run Related Config
 GPU = True
-Z_Prior = Enum('Z_Prior', 'NONE UNIFORM ORIGINAL')
-SpairType = Enum('SpairType', 'SEQUENTIAL CONV')
+Z_Prior = Enum("Z_Prior", "NONE UNIFORM ORIGINAL")
+SpairType = Enum("SpairType", "SEQUENTIAL CONV")
 
 
-class RunConfig():
-    def __init__(self, gpu=True, z_prior=Z_Prior.NONE,
-                 spair_type=SpairType.SEQUENTIAL, ):
+class RunConfig:
+    def __init__(
+        self, gpu=True, z_prior=Z_Prior.NONE, spair_type=SpairType.SEQUENTIAL,
+    ):
         self.gpu = gpu
         self.z_prior = z_prior
         self.spair_type = spair_type
@@ -57,30 +58,26 @@ MIN_HW = 0.0
 
 # VAE Priors, used to KL computation {name:[mean, std]}
 PRIORS = {
-    'cy_logit': [0., 1.],
-    'cx_logit': [0., 1.],
+    "cy_logit": [0.0, 1.0],
+    "cx_logit": [0.0, 1.0],
     # 'height_logit':[3., 0.5], # Larger prior for 28 x 28, and this is now defined in run_args
     # 'width_logit':[3., 0.5],
-    'attr': [0., 1.],
-    'depth_logit': [0., 1.],
+    "attr": [0.0, 1.0],
+    "depth_logit": [0.0, 1.0],
 }
 
 # Beta factor for Beta VAE
 VAE_BETA = 1
 
 # training wheels
-LATENT_VAR_TRAINING_WHEEL_PARAM = dict(start=1.0,  # 1.0
-                                       end=0.0,
-                                       decay_rate=0.0,
-                                       decay_step=1000.,
-                                       staircase=True)
+LATENT_VAR_TRAINING_WHEEL_PARAM = dict(
+    start=1.0, end=0.0, decay_rate=0.0, decay_step=1000.0, staircase=True  # 1.0
+)
 
 # Dyanmic prior used by the object presence latent variable
-OBJ_PRES_COUNT_LOG_PRIOR = dict(start=1000000.0,
-                                end=0.0125,
-                                decay_rate=0.1,
-                                decay_step=1000.,
-                                log_space=True)
+OBJ_PRES_COUNT_LOG_PRIOR = dict(
+    start=1000000.0, end=0.0125, decay_rate=0.1, decay_step=1000.0, log_space=True
+)
 
 # Decoder bias:
 
@@ -90,4 +87,4 @@ ALPHA_LOGIT_BIAS = 5.0
 
 # environment variables
 
-IS_LOCAL = 'LOCAL' in os.environ
+IS_LOCAL = "LOCAL" in os.environ

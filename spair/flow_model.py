@@ -37,7 +37,7 @@ class Planar(nn.Module):
         zk = zk.squeeze(1)
         # reparameterize u such that the flow becomes invertible (see appendix paper)
         uw = w * u
-        m_uw = -1. + self.softplus(uw)
+        m_uw = -1.0 + self.softplus(uw)
         w_norm_sq = w ** 2
         u_hat = u + ((m_uw - uw) * w / w_norm_sq)
 
@@ -63,7 +63,7 @@ class SingleZPlanarNF2d(nn.Module):
         super().__init__()
 
         # Initialize log-det-jacobian to zero
-        self.log_det_j = 0.
+        self.log_det_j = 0.0
 
         # Flow parameters
         flow = Planar
@@ -72,16 +72,18 @@ class SingleZPlanarNF2d(nn.Module):
         self.z_size = 1
 
         # Amortized flow parameters
-        self.amor_u = nn.Conv2d(self.h_dim, self.num_flows * self.z_size, kernel_size=1,
-                                stride=1)
-        self.amor_w = nn.Conv2d(self.h_dim, self.num_flows * self.z_size, kernel_size=1,
-                                stride=1)
+        self.amor_u = nn.Conv2d(
+            self.h_dim, self.num_flows * self.z_size, kernel_size=1, stride=1
+        )
+        self.amor_w = nn.Conv2d(
+            self.h_dim, self.num_flows * self.z_size, kernel_size=1, stride=1
+        )
         self.amor_b = nn.Conv2d(self.h_dim, self.num_flows, kernel_size=1, stride=1)
 
         # Normalizing flow layers
         for k in range(self.num_flows):
             flow_k = flow()
-            self.add_module('flow_' + str(k), flow_k)
+            self.add_module("flow_" + str(k), flow_k)
 
     def forward(self, z, h):
         """
@@ -89,7 +91,7 @@ class SingleZPlanarNF2d(nn.Module):
         Log determinant is computed as log_det_j = N E_q_z0[\sum_k log |det dz_k/dz_k-1| ].
         """
 
-        self.log_det_j = 0.
+        self.log_det_j = 0.0
 
         u = self.amor_u(h)
         w = self.amor_w(h)
@@ -100,9 +102,10 @@ class SingleZPlanarNF2d(nn.Module):
 
         # Normalizing flows
         for k in range(self.num_flows):
-            flow_k = getattr(self, 'flow_' + str(k))
-            z_k, log_det_jacobian = flow_k(z_k, u[:, k, ...], w[:, k, ...],
-                                           b[:, k, ...])
+            flow_k = getattr(self, "flow_" + str(k))
+            z_k, log_det_jacobian = flow_k(
+                z_k, u[:, k, ...], w[:, k, ...], b[:, k, ...]
+            )
             self.log_det_j += log_det_jacobian
 
         z_k = z_k.unsqueeze(1)
@@ -117,12 +120,12 @@ def get_mask(in_features, out_features, in_flow_features, mask_type=None):
     See Figure 1 for a better illustration:
     https://arxiv.org/pdf/1502.03509.pdf
     """
-    if mask_type == 'input':
+    if mask_type == "input":
         in_degrees = torch.arange(in_features) % in_flow_features
     else:
         in_degrees = torch.arange(in_features) % (in_flow_features - 1)
 
-    if mask_type == 'output':
+    if mask_type == "output":
         out_degrees = torch.arange(out_features) % in_flow_features - 1
     else:
         out_degrees = torch.arange(out_features) % (in_flow_features - 1)
@@ -131,20 +134,15 @@ def get_mask(in_features, out_features, in_flow_features, mask_type=None):
 
 
 class MaskedConv2d(nn.Module):
-    def __init__(self,
-                 in_features,
-                 out_features,
-                 mask,
-                 bias=True):
+    def __init__(self, in_features, out_features, mask, bias=True):
         super().__init__()
         self.conv = nn.Conv2d(in_features, out_features, kernel_size=1, stride=1)
 
-        self.register_buffer('mask', mask)
+        self.register_buffer("mask", mask)
 
     def forward(self, inputs):
         mask_broadcast = self.mask[..., None, None]
-        output = F.conv2d(inputs, self.conv.weight * mask_broadcast,
-                          self.conv.bias)
+        output = F.conv2d(inputs, self.conv.weight * mask_broadcast, self.conv.bias)
 
         return output
 
@@ -154,32 +152,29 @@ class MADEConv(nn.Module):
     (https://arxiv.org/abs/1502.03509s).
     """
 
-    def __init__(self,
-                 num_inputs,
-                 num_hidden,
-                 act='relu',
-                 pre_exp_tanh=False):
+    def __init__(self, num_inputs, num_hidden, act="relu", pre_exp_tanh=False):
         super().__init__()
 
-        activations = {'relu': nn.ReLU, 'sigmoid': nn.Sigmoid, 'tanh': nn.Tanh}
+        activations = {"relu": nn.ReLU, "sigmoid": nn.Sigmoid, "tanh": nn.Tanh}
         act_func = activations[act]
 
-        input_mask = get_mask(
-            num_inputs, num_hidden, num_inputs, mask_type='input')
+        input_mask = get_mask(num_inputs, num_hidden, num_inputs, mask_type="input")
         hidden_mask = get_mask(num_hidden, num_hidden, num_inputs)
         output_mask = get_mask(
-            num_hidden, num_inputs * 2, num_inputs, mask_type='output')
+            num_hidden, num_inputs * 2, num_inputs, mask_type="output"
+        )
 
         self.joiner = MaskedConv2d(num_inputs, num_hidden, input_mask)
 
-        self.trunk = nn.Sequential(act_func(),
-                                   MaskedConv2d(num_hidden, num_hidden,
-                                                hidden_mask), act_func(),
-                                   MaskedConv2d(num_hidden, num_inputs * 2,
-                                                output_mask))
+        self.trunk = nn.Sequential(
+            act_func(),
+            MaskedConv2d(num_hidden, num_hidden, hidden_mask),
+            act_func(),
+            MaskedConv2d(num_hidden, num_inputs * 2, output_mask),
+        )
 
-    def forward(self, inputs, cond_inputs=None, mode='direct'):
-        if mode == 'direct':
+    def forward(self, inputs, cond_inputs=None, mode="direct"):
+        if mode == "direct":
             h = self.joiner(inputs)
             trunk = self.trunk(h)
             m, a = trunk.chunk(2, 1)
@@ -191,8 +186,7 @@ class MADEConv(nn.Module):
             for i_col in range(inputs.shape[1]):
                 h = self.joiner(x)
                 m, a = self.trunk(h).chunk(2, 1)
-                x[:, i_col] = inputs[:, i_col] * torch.exp(
-                    a[:, i_col]) + m[:, i_col]
+                x[:, i_col] = inputs[:, i_col] * torch.exp(a[:, i_col]) + m[:, i_col]
             return x, -a.sum(1, keepdim=True).mean(dim=[-1, -2])
 
 
@@ -210,24 +204,22 @@ class BatchNormFlow2d(nn.Module):
         self.momentum = momentum
         self.eps = eps
 
-        self.register_buffer('running_mean', torch.zeros(num_inputs))
-        self.register_buffer('running_var', torch.ones(num_inputs))
+        self.register_buffer("running_mean", torch.zeros(num_inputs))
+        self.register_buffer("running_var", torch.ones(num_inputs))
 
-    def forward(self, inputs, cond_inputs=None, mode='direct'):
-        if mode == 'direct':
+    def forward(self, inputs, cond_inputs=None, mode="direct"):
+        if mode == "direct":
             if self.training:
                 self.batch_mean = inputs.mean(dim=[0, 2, 3])  # mean along batch, h an w
-                self.batch_var = (
-                                         inputs - self.batch_mean[-1, None, None]).pow(
-                    2).mean(dim=[0, 2, 3]) + self.eps
+                self.batch_var = (inputs - self.batch_mean[-1, None, None]).pow(2).mean(
+                    dim=[0, 2, 3]
+                ) + self.eps
 
                 self.running_mean.mul_(self.momentum)
                 self.running_var.mul_(self.momentum)
 
-                self.running_mean.add_(self.batch_mean.data *
-                                       (1 - self.momentum))
-                self.running_var.add_(self.batch_var.data *
-                                      (1 - self.momentum))
+                self.running_mean.add_(self.batch_mean.data * (1 - self.momentum))
+                self.running_var.add_(self.batch_var.data * (1 - self.momentum))
 
                 mean = self.batch_mean
                 var = self.batch_var
@@ -236,10 +228,11 @@ class BatchNormFlow2d(nn.Module):
                 var = self.running_var
 
             x_hat = (inputs - mean[-1, None, None]) / var[-1, None, None].sqrt()
-            y = torch.exp(self.log_gamma)[-1, None, None] * x_hat + self.beta[
-                -1, None, None]
-            return y, (self.log_gamma - 0.5 * torch.log(var)).sum(
-                -1, keepdim=True)
+            y = (
+                torch.exp(self.log_gamma)[-1, None, None] * x_hat
+                + self.beta[-1, None, None]
+            )
+            return y, (self.log_gamma - 0.5 * torch.log(var)).sum(-1, keepdim=True)
         else:
             if self.training:
                 mean = self.batch_mean
@@ -252,8 +245,7 @@ class BatchNormFlow2d(nn.Module):
 
             y = x_hat * var.sqrt() + mean
 
-            return y, (-self.log_gamma + 0.5 * torch.log(var)).sum(
-                -1, keepdim=True)
+            return y, (-self.log_gamma + 0.5 * torch.log(var)).sum(-1, keepdim=True)
 
 
 class Reverse2d(nn.Module):
@@ -267,13 +259,17 @@ class Reverse2d(nn.Module):
         self.perm = np.array(np.arange(0, num_inputs)[::-1])
         self.inv_perm = np.argsort(self.perm)
 
-    def forward(self, inputs, cond_inputs=None, mode='direct'):
-        if mode == 'direct':
-            return inputs[:, self.perm, ...], torch.zeros(
-                inputs.size(0), 1, device=inputs.device)
+    def forward(self, inputs, cond_inputs=None, mode="direct"):
+        if mode == "direct":
+            return (
+                inputs[:, self.perm, ...],
+                torch.zeros(inputs.size(0), 1, device=inputs.device),
+            )
         else:
-            return inputs[:, self.inv_perm], torch.zeros(
-                inputs.size(0), 1, device=inputs.device)
+            return (
+                inputs[:, self.inv_perm],
+                torch.zeros(inputs.size(0), 1, device=inputs.device),
+            )
 
 
 class FlowSequential(nn.Sequential):
@@ -282,8 +278,9 @@ class FlowSequential(nn.Sequential):
     computes log jacobians.
     """
 
-    def forward(self, inputs, cond_inputs=None, mode='direct', logdets=None,
-                use_conv=False):
+    def forward(
+        self, inputs, cond_inputs=None, mode="direct", logdets=None, use_conv=False
+    ):
         """ Performs a forward or backward pass for flow modules.
         Args:
             inputs: a tuple of inputs and logdets
@@ -294,8 +291,8 @@ class FlowSequential(nn.Sequential):
         if logdets is None:
             logdets = torch.zeros(inputs.size(0), 1, device=inputs.device)
 
-        assert mode in ['direct', 'inverse']
-        if mode == 'direct':
+        assert mode in ["direct", "inverse"]
+        if mode == "direct":
             for module in self._modules.values():
                 inputs, logdet = module(inputs, cond_inputs, mode)
                 logdets += logdet
@@ -309,8 +306,11 @@ class FlowSequential(nn.Sequential):
     def log_probs(self, inputs, cond_inputs=None, use_conv=False):
         # FIXME Calling forward
         u, log_jacob = self(inputs, cond_inputs, use_conv=use_conv)
-        log_probs = (-0.5 * u.pow(2) - 0.5 * np.log(2 * np.pi)).sum(
-            1, keepdim=True).mean(dim=[-1, -2])
+        log_probs = (
+            (-0.5 * u.pow(2) - 0.5 * np.log(2 * np.pi))
+            .sum(1, keepdim=True)
+            .mean(dim=[-1, -2])
+        )
         return (log_probs + log_jacob).sum(-1, keepdim=True)
 
     def sample(self, num_samples=None, noise=None, cond_inputs=None):
@@ -320,5 +320,5 @@ class FlowSequential(nn.Sequential):
         noise = noise.to(device)
         if cond_inputs is not None:
             cond_inputs = cond_inputs.to(device)
-        samples = self.forward(noise, cond_inputs, mode='inverse')[0]
+        samples = self.forward(noise, cond_inputs, mode="inverse")[0]
         return samples
