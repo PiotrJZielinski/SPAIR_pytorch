@@ -1,0 +1,8 @@
+torch==1.5
+torchvision
+numpy==1.18.1
+matplotlib
+Pillow
+h5py
+coolname
+tensorboardX

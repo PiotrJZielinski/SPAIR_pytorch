@@ -3,8 +3,8 @@ up:
 	git commit -m "AUTO: Small Fix"
 	git push
 
-run:
-	python3 train.py
+#run:
+#	python3 train.py
 
 run_gpu:
 	python3 train.py --gpu
@@ -34,3 +34,19 @@ test_new_features:
 	python3 train.py --gpu --backbone_self_attention || true
 	python3 train.py --gpu --use_uber_trick --use_conv_z_attr --z_pres no_prior --conv_neighbourhood 2 --backbone_self_attention || true
 
+format: ## Run pre-commit hooks to format code
+	 pre-commit run --all-files
+
+args ?= -vvv --cov ssd
+
+build: ## Build docker image
+	docker build -f Dockerfile -t spair:latest .
+
+docker_args ?= --gpus all  --volume $(shell pwd):/app --volume $(shell pwd)/data:/app/data
+
+shell: ## Run poetry shell
+	docker run -it --rm $(docker_args) --entrypoint /bin/bash spair:latest
+
+spair_args ?=
+run: ## Run model
+	docker run --rm $(docker_args) spair:latest $(spair_args)
