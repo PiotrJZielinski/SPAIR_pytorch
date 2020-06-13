@@ -21,9 +21,10 @@ def record_image():
 
 def telegram_yonk(message):
     # Telegram notify myself
-    param = dict(chat_id=390311059, disable_web_page_preview=1, text=message,)
-    url = "https://api.telegram.org/bot818353417:AAGN8Jt25kIUy8IaQxGt9MKITpzDqDkao3k/sendMessage"
-    requests.get(url, param)
+    # param = dict(chat_id=390311059, disable_web_page_preview=1, text=message,)
+    # url = "https://api.telegram.org/bot818353417:AAGN8Jt25kIUy8IaQxGt9MKITpzDqDkao3k/sendMessage"
+    # requests.get(url, param)
+    pass
 
 
 def init_logger(log_path):

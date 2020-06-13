@@ -8,6 +8,7 @@ from coolname import generate_slug
 from tensorboardX import SummaryWriter
 from torch import optim
 from torchvision.transforms import Resize
+from tqdm.auto import tqdm
 
 from spair import config as cfg
 from spair import debug_tools
@@ -29,7 +30,7 @@ def main():
 
     device = torch.device("cuda" if (torch.cuda.is_available() and args.gpu) else "cpu")
     data = CityscapesNoTarget(
-        "data/cityscapes", split="train_extra", transform=Resize((128, 128))
+        "data/cityscapes", split="train", transform=Resize((128, 128))
     )
 
     run_manager = RunManager(
@@ -79,7 +80,7 @@ def train(run_manager):
     debug_tools.benchmark_init()
     # Main training loop
 
-    for global_step, batch in run_manager.iterate_data():
+    for global_step, batch in tqdm(run_manager.iterate_data(), total=run_manager.run_args.max_iter):
 
         x_image = batch
         x_image = x_image.to(device)
