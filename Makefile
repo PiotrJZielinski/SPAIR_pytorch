@@ -16,7 +16,7 @@ sync:
 	rsync -arvu --exclude=logs_v2/ --exclude=logs/ --exclude=spair/data/* --exclude=data/* -e ssh . naturalreaders:spair_pytorch
 
 tb:
-	tensorboard --logdir logs/ --host 0.0.0.0 --port 8081
+	tensorboard --logdir logs/ --port 8081
 
 tb_hp_search:
 	tensorboard --logdir logs/hp_search/ --host 0.0.0.0 --port 8081

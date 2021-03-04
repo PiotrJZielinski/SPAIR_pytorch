@@ -17,7 +17,7 @@ class RunConfig:
         pass
 
 
-BATCH_SIZE = 16
+BATCH_SIZE = 64
 INPUT_IMAGE_SHAPE = [1, 128, 128]  # originally 128 128 TODO change me back
 
 DEFAULT_MLP_TOPOLOGY = [100, 100]
@@ -53,7 +53,7 @@ ANCHORBOX_SHAPE = [48, 48]  # TODO 48 x 48
 # Bounding box stuff, it's the maximum range relative to anchor box
 MAX_YX = 1.5
 MIN_YX = -0.5
-MAX_HW = 1.0
+MAX_HW = 5.0
 MIN_HW = 0.0
 
 # VAE Priors, used to KL computation {name:[mean, std]}
