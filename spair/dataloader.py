@@ -160,8 +160,8 @@ class CLEVR(torch.utils.data.Dataset):
         labels = torch.tensor(1, dtype=torch.int64)
         n_objs = boxes.shape[0]
         return (
-            torch.functional.pad(boxes, [0, 0, 0, pad_size - n_objs]),
-            torch.functional.pad(labels, [0, pad_size - n_objs])
+            torch.nn.functional.pad(boxes, [0, 0, 0, pad_size - n_objs]),
+            torch.nn.functional.pad(labels, [0, pad_size - n_objs])
         )
 
     def __getitem__(self, item) -> Tuple[torch.Tensor, np.ndarray, int]:
