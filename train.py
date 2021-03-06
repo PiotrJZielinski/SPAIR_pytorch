@@ -212,7 +212,7 @@ def parse_args(run_log_path):
         "--dataset",
         type=str,
         default="mnist",
-        choices=["mnist, clevr"],
+        choices=["mnist", "clevr"],
         help="repro dataset"
     )
 
@@ -228,7 +228,7 @@ def parse_args(run_log_path):
     parser.add_argument(
         "--dataset_filename",
         type=str,
-        default="multiscalemnist.h5",
+        default="",
         help="name of the dataset",
     )
 
