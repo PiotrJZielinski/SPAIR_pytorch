@@ -136,7 +136,6 @@ class CLEVR(torch.utils.data.Dataset):
             class_name = (
                 f"{obj['size']} {obj['color']} {obj['material']} {obj['shape']}"
             )
-            annotation["class"].append(self.CLASS_LABELS.index(class_name) + 1)
             annotation["x_min"].append(max(0, x - width_l))
             annotation["y_min"].append(max(0, y - height_d))
             annotation["x_max"].append(min(480, x + width_r))
@@ -157,7 +156,7 @@ class CLEVR(torch.utils.data.Dataset):
             list(zip(ann["x_min"], ann["y_min"], ann["x_max"], ann["y_max"])),
             dtype=torch.float32,
         )
-        labels = torch.tensor(ann["class"], dtype=torch.int64)
+        labels = torch.tensor(1, dtype=torch.int64)
         return boxes, labels
 
     def __getitem__(self, item) -> Tuple[torch.Tensor, np.ndarray, int]:
