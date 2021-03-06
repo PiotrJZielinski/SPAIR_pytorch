@@ -74,6 +74,8 @@ class Backbone(Module):
 
     def _build_backbone(self, n_in_channels, n_out_channels):
         """Builds the convnet of the backbone"""
+        print("test")
+        print(n_in_channels)
 
         n_prev = n_in_channels
         net = OrderedDict()

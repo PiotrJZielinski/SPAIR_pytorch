@@ -219,7 +219,7 @@ def parse_args(run_log_path):
     parser.add_argument(
         "--dataset_filename",
         type=str,
-        default="multiscalemnist.hdf5",
+        default="multiscalemnist.h5",
         help="name of the dataset",
     )
 

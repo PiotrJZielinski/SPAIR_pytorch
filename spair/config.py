@@ -17,8 +17,8 @@ class RunConfig:
         pass
 
 
-BATCH_SIZE = 64
-INPUT_IMAGE_SHAPE = [1, 128, 128]  # originally 128 128 TODO change me back
+BATCH_SIZE = 32
+INPUT_IMAGE_SHAPE = [3, 128, 128]  # originally 128 128 TODO change me back
 
 DEFAULT_MLP_TOPOLOGY = [100, 100]
 DEFAULT_BACKBONE_TOPOLOGY = [

@@ -62,4 +62,4 @@ class MultiScaleMNIST(torch.utils.data.Dataset):
         boxes = self.dataset["boxes"][item]  # type: ignore
         labels = self.dataset["labels"][item]  # type: ignore
         mask = np.where(labels != -1)
-        return torch.from_numpy(np.expand_dims(image, axis=0)).float(), boxes.astype(np.float), len(mask)
+        return torch.from_numpy(image).float().permute(2, 0, 1), boxes.astype(np.float), len(mask)
