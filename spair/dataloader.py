@@ -82,7 +82,7 @@ class CLEVR(torch.utils.data.Dataset):
         super().__init__()
         self.file_path = file_path
         self.subset = "train"
-        self.image_dir, annotations_file = self.datasets[subset]
+        self.image_dir, annotations_file = self.datasets[self.subset]
         with Path(self.file_path).joinpath(annotations_file).open("r") as fp:
             self.annotations = json.load(fp)["scenes"]
         self.image_names = [ann["image_filename"] for ann in self.annotations]
