@@ -80,10 +80,10 @@ class CLEVR(torch.utils.data.Dataset):
         subset: str = "train",
     ):
         super().__init__()
-        self.file_path = file_path
+        self.file_path = Path(file_path)
         self.subset = "train"
         self.image_dir, annotations_file = self.datasets[self.subset]
-        with Path(self.file_path).joinpath(annotations_file).open("r") as fp:
+        with self.file_path.joinpath(annotations_file).open("r") as fp:
             self.annotations = json.load(fp)["scenes"]
         self.image_names = [ann["image_filename"] for ann in self.annotations]
 
@@ -145,7 +145,7 @@ class CLEVR(torch.utils.data.Dataset):
 
     def _get_image(self, item: int) -> torch.Tensor:
         image_file = self.image_names[item]
-        image_path = self.data_dir.joinpath(self.image_dir).joinpath(image_file)
+        image_path = self.file_path.joinpath(self.image_dir).joinpath(image_file)
         image = np.array(PIL.Image.open(image_path).convert("RGB")) / 255
         return torch.tensor(image)
 
@@ -161,7 +161,7 @@ class CLEVR(torch.utils.data.Dataset):
 
     def __getitem__(self, item) -> Tuple[torch.Tensor, np.ndarray, int]:
         image_file = self.image_names[item]
-        image_path = self.data_dir.joinpath(self.image_dir).joinpath(image_file)
+        image_path = self.file_path.joinpath(self.image_dir).joinpath(image_file)
         image = np.array(PIL.Image.open(image_path).convert("RGB").resize((128, 128), Image.BICUBIC)) / 255
         boxes, labels = self._get_annotation(item)
         mask = np.where(labels != -1)
