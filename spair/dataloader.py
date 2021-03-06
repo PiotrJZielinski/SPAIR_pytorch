@@ -157,11 +157,11 @@ class CLEVR(torch.utils.data.Dataset):
             list(zip(ann["x_min"], ann["y_min"], ann["x_max"], ann["y_max"])),
             dtype=torch.float32,
         )
-        labels = torch.tensor(1, dtype=torch.int64)
+        labels = torch.ones(pad_size, dtype=torch.int64)
         n_objs = boxes.shape[0]
         return (
             torch.nn.functional.pad(boxes, [0, 0, 0, pad_size - n_objs]),
-            torch.nn.functional.pad(labels, [0, pad_size - n_objs])
+            labels
         )
 
     def __getitem__(self, item) -> Tuple[torch.Tensor, np.ndarray, int]:
