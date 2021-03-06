@@ -150,6 +150,7 @@ class CLEVR(torch.utils.data.Dataset):
         return torch.tensor(image)
 
     def _get_annotation(self, item: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        pad_size = 200
         scene = self.annotations[item]
         ann = self.extract_bbox_and_label(scene)
         boxes = torch.tensor(
@@ -157,7 +158,11 @@ class CLEVR(torch.utils.data.Dataset):
             dtype=torch.float32,
         )
         labels = torch.tensor(1, dtype=torch.int64)
-        return boxes, labels
+        n_objs = boxes.shape[0]
+        return (
+            torch.functional.pad(boxes, [0, 0, 0, pad_size - n_objs]),
+            torch.functional.pad(labels, [0, pad_size - n_objs])
+        )
 
     def __getitem__(self, item) -> Tuple[torch.Tensor, np.ndarray, int]:
         image_file = self.image_names[item]
