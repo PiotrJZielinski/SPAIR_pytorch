@@ -165,4 +165,4 @@ class CLEVR(torch.utils.data.Dataset):
         image = np.array(PIL.Image.open(image_path).convert("RGB").resize((128, 128), Image.BICUBIC)) / 255
         boxes, labels = self._get_annotation(item)
         mask = np.where(labels != -1)
-        return torch.from_numpy(image).float().permute(2, 0, 1), boxes.astype(np.float), len(mask)
+        return torch.from_numpy(image).float().permute(2, 0, 1), boxes, len(mask)
