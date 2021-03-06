@@ -6,6 +6,7 @@ import h5py
 import json
 import numpy as np
 from PIL import Image
+import PIL
 import torch
 from torch.utils import data
 
