@@ -12,7 +12,7 @@ from tqdm.auto import tqdm
 from spair import config as cfg
 from spair import debug_tools
 from spair import metric
-from spair.dataloader import MultiScaleMNIST
+from spair.dataloader import MultiScaleMNIST, CLEVR
 from spair.logging import *
 from spair.manager import RunManager
 from spair.models import ConvSpair, Spair
@@ -31,7 +31,8 @@ def main():
     device = torch.device("cuda" if (torch.cuda.is_available() and args.gpu) else "cpu")
     dataset_path = "data/" + args.dataset_filename
     dataset_subset_name = args.dataset_subset
-    data = MultiScaleMNIST(dataset_path, dataset_subset_name)
+    datasets = {"mnist": MultiScaleMNIST, "clevr": CLEVR}
+    data = datasets[args.dataset](dataset_path, dataset_subset_name)
 
     run_manager = RunManager(
         run_name=run_name, dataset=data, device=device, writer=writer, run_args=args
@@ -205,6 +206,14 @@ def parse_args(run_log_path):
         "--backbone_self_attention",
         help="Use self attention for backbone network",
         action="store_true",
+    )
+
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        default="mnist",
+        choices=["mnist, clevr"],
+        help="repro dataset"
     )
 
     # Dataset config
